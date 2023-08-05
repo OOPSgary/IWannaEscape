@@ -91,7 +91,7 @@ var trapTrigger1 = TrapTrigger{
 			Time: 50,
 			Movement: movementPlus{
 				X:     -580,
-				Y:     -250 + 16,
+				Y:     -250,
 				SizeX: 8,
 				SizeY: 8,
 			},
