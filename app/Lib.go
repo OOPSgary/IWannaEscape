@@ -91,7 +91,7 @@ var trapTrigger1 = TrapTrigger{
 			Time: 50,
 			Movement: movementPlus{
 				X:     -580,
-				Y:     -250 + 64,
+				Y:     -250 + 16,
 				SizeX: 8,
 				SizeY: 8,
 			},
@@ -106,7 +106,7 @@ var trapTrigger1 = TrapTrigger{
 			Mode: 3,
 			Time: 37,
 			Movement: movementPlus{
-				Y: 400,
+				Y: 480,
 			},
 		}, {
 			Mode: 3,
@@ -116,7 +116,7 @@ var trapTrigger1 = TrapTrigger{
 			},
 		}, {
 			Mode: 2,
-			Time: 20,
+			Time: 200,
 		},
 	},
 }
@@ -357,16 +357,17 @@ type strike struct {
 	Obj          *resolv.Object
 	Trigger      chan TrapTrigger
 	KillSingal   chan interface{}
+	Online       bool //Not using this again
 
-	Close  chan interface{} //Not using this again
-	Closed bool             //Not using this again
-	Online bool             //Not using this again
-	Mutex  *sync.Mutex      //Not using this again
+	// Close  chan interface{} //Not using this again
+	// Closed bool             //Not using this again
+	// Mutex  *sync.Mutex      //Not using this again
 }
 
 // If you need to destory this strike just Close the channel
 // Remind that delayed changes is recently not support Size
-func (s *strike) Load() {
+/*
+func (s *strike) OldLoad() {
 	s.Closed = false
 	strikeWaitGroup.Add(1)
 	go func() {
@@ -545,7 +546,7 @@ func (s *strike) Load() {
 		close(s.Close)
 	}()
 }
-
+*/
 func (s *strike) Render(screen *ebiten.Image) {
 	if s.Online {
 		geo := &ebiten.DrawImageOptions{}
@@ -589,9 +590,11 @@ func NewStrike(Pos movement, SizeX, SizeY float64) *strike {
 		Angle:   0,
 		Obj:     obj,
 		Trigger: make(chan TrapTrigger),
-		Close:   make(chan interface{}),
-		Online:  false,
-		Mutex:   &sync.Mutex{},
+		// Close:      make(chan interface{}),
+		// Closed:     false,
+		KillSingal: make(chan interface{}),
+		Online:     false,
+		// Mutex:      &sync.Mutex{},
 	}
 }
 
@@ -668,47 +671,158 @@ func (b block) Draw(screen *ebiten.Image) {
 var errSendOnClosedChannel = errors.New("send on closed chan")
 
 func (s *strike) Send(t TrapTrigger) error {
-	switch {
-	case <-s.Close:
+	select {
+	case <-s.KillSingal:
 		return errSendOnClosedChannel
 	default:
 		s.Trigger <- t
 	}
 	return nil
 }
-func (s *strike) _Load() {
-	s.Closed = false
+func (s *strike) Load() {
+	go s.load()
+}
+func (s *strike) load() {
 	for {
-		if !s.process() {
+		if s.process() {
+			waitKeepProcessing.Add(1)
 			close(s.Trigger)
+			if !isChanClosed(s.KillSingal) {
+				close(s.KillSingal)
+			}
+			if s.Online {
+				World.Remove(s.Obj)
+			}
+			waitKeepProcessing.Done()
 			break
 		}
 	}
 }
-func (s *strike) process() bool {
-	a, ok := <-s.Trigger
-	if !ok {
-		return false
+func (s *strike) process() (stop bool) {
+	var a TrapTrigger
+	select {
+	case a = <-s.Trigger:
+	case <-s.KillSingal:
+		return true
 	}
-	waitKeepProcessing.Add(1)
 	for _, action := range a.Movement {
+		log.Println(action)
 		switch action.Mode {
 		case 1:
-			if s.handlerAppear(int(action.Time)) {
-				return false
+			if s.handlerAppear(action) {
+				return true
+			}
+		case 2:
+			if s.handlerDisAppear(action) {
+				return true
+			}
+		case 3:
+			if s.handlerMovement(action) {
+				return true
+			}
+		case 4:
+			if s.handlerWaiting(action) {
+				return true
 			}
 		}
 	}
-	return true
+	return false
 }
-func (s *strike) handlerAppear(sleepTenMill int) (stop bool) {
+func (s *strike) handlerAppear(action trapmovement) (stop bool) {
 	select {
-	case <-time.After(time.Millisecond * 10 * time.Duration(sleepTenMill)):
-		World.Add(s.obj)
+	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
+		World.Add(s.Obj)
+		s.Online = true
 		return false
-	case <-s.Close:
+	case <-s.KillSingal:
 		return true
 	}
+}
+func (s *strike) handlerDisAppear(action trapmovement) (stop bool) {
+	select {
+	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
+		World.Remove(s.Obj)
+		s.Online = false
+		return false
+	case <-s.KillSingal:
+		return true
+	}
+}
+func (s *strike) handlerMovement(action trapmovement) (stop bool) {
+	PreferData := struct {
+		sizeX, sizeY float64
+	}{
+		sizeX: s.SizeX,
+		sizeY: s.SizeY,
+	}
+	delayProcess := func() {
+		s.Pos.x += action.Movement.X / float64(action.Time)
+		s.Pos.y += action.Movement.Y / float64(action.Time)
+		s.SizeX += (ifPositiveNum(s.SizeX, action.Movement.SizeX) - PreferData.sizeX) / float64(action.Time)
+		s.SizeY += (ifPositiveNum(s.SizeY, action.Movement.SizeY) - PreferData.sizeY) / float64(action.Time)
+		s.Angle += action.Movement.Angle / action.Time
+		s.Obj.X = s.Pos.x
+		s.Obj.Y = s.Pos.y
+		s.Obj.W = 32 * s.SizeX
+		s.Obj.H = 32 * s.SizeY
+		s.Obj.SetShape(resolv.NewConvexPolygon(
+			0, 0,
+
+			s.Obj.W/2, 0,
+			s.Obj.W/2+1, 0,
+			0, s.Obj.H,
+			s.Obj.W, s.Obj.H,
+		))
+		// s.Obj.Shape.SetScale(s.SizeX, s.SizeY)
+		s.Obj.Shape.SetRotation(s.Angle)
+		s.Obj.Update()
+	}
+	if action.Time <= 0 {
+		s.Pos.x += action.Movement.X
+		s.Pos.y += action.Movement.Y
+		s.SizeX = ifPositiveNum(s.SizeX, action.Movement.SizeX)
+		s.SizeY = ifPositiveNum(s.SizeY, action.Movement.SizeY)
+		s.Angle += action.Movement.Angle
+		s.Obj.X = s.Pos.x
+		s.Obj.Y = s.Pos.y
+		s.Obj.W = 32 * s.SizeX
+		s.Obj.H = 32 * s.SizeY
+		s.Obj.SetShape(resolv.NewConvexPolygon(
+			0, 0,
+
+			s.Obj.W/2, 0,
+			s.Obj.W/2+1, 0,
+			0, s.Obj.H,
+			s.Obj.W, s.Obj.H,
+		))
+		// s.Obj.Shape.SetScale(s.SizeX, s.SizeY)
+		s.Obj.Shape.SetRotation(s.Angle)
+		s.Obj.Update()
+	} else {
+		for i := 1; i < int(action.Time); i++ {
+			select {
+			case <-time.After(time.Millisecond * 10):
+				delayProcess()
+			case <-s.KillSingal:
+				return true
+			}
+		}
+	}
+	return false
+}
+func (s *strike) handlerWaiting(action trapmovement) (stop bool) {
+	select {
+	case <-s.KillSingal:
+		return true
+	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
+		return false
+	}
+}
+func ifPositiveNum(value, replaceValue float64) float64 {
+	if replaceValue > 0 {
+		return replaceValue
+	}
+	return value
 }
 
 type TrapTrigger struct {
@@ -720,7 +834,7 @@ type trapmovement struct {
 	// 2 for dispear (time will be used to sleep before it run)
 	// 3 for movement+rorate(Angle)
 	// 4 for just sleep
-	Time     int // Counted in 10Mill
+	Time     float64 // Counted in 10Mill Must be integer
 	Movement movementPlus
 }
 type movementPlus struct {

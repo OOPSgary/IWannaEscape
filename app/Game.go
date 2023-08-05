@@ -25,11 +25,23 @@ type Game struct {
 	Wait   *sync.WaitGroup
 }
 
-func (g *Game) Draw(screen *ebiten.Image) {
-	var waitChannel <-chan time.Time
-	if !ebiten.IsVsyncEnabled() && ChangeFPSfps > 0 {
-		waitChannel = time.After(time.Second / time.Duration(ChangeFPSfps))
+var mainProcess *sync.WaitGroup = &sync.WaitGroup{}
+
+func (g *Game) Update() error {
+	mainProcess.Wait()
+	switch Status {
+	case 1:
+		g.syncCharacterMovement()
+		g.syncCharacter()
 	}
+
+	return nil
+}
+func (g *Game) Draw(screen *ebiten.Image) {
+	// var waitChannel <-chan time.Time
+	// if !ebiten.IsVsyncEnabled() && ChangeFPSfps > 0 {
+	// 	waitChannel = time.After(time.Second / time.Duration(ChangeFPSfps))
+	// }
 	g.screen = screen
 	screen.DrawImage(NormalBackground, nil)
 	g.syncExtraKeys()
@@ -47,6 +59,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			if Keys.R && !rePressR {
 				rePressR = true
 				Status = 1
+				mainProcess.Add(1)
 			}
 			if !Keys.R {
 				rePressR = false
@@ -79,6 +92,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		}
 	case 1:
 		if Keys.R && !rePressR {
+			mainProcess.Add(1)
 			rePressR = true
 			CallExtra(0)
 			CallExtra(1)
@@ -87,9 +101,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			rePressR = false
 		}
 		CallOnce(0, func() {
-			waitKeepProcessing.Wait()
 			Dead = false
 			g.resetMap()
+			waitKeepProcessing.Wait()
 			g.resetCharacter()
 			g.moveCharacter(60, 40)
 			g.box()
@@ -110,7 +124,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				0.2,
 			)
 			go TriggerList[0].Process()
-
+			mainProcess.Done()
 		})
 
 		//Setting up main Wide-World
@@ -142,20 +156,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			opG.ColorScale.SetA(startA)
 			screen.DrawImage(GameOver, opG)
 			CallOnce(1, func() {
-				waitKeepProcessing.Add(1)
 				deadSoundPlayer.Rewind()
 				deadSoundPlayer.Play()
-				if !strikeList[0].Closed {
-					strikeList[0].Close <- 1
+				if !isChanClosed(strikeList[0].KillSingal) {
+					strikeList[0].KillSingal <- 1
 				}
-				waitKeepProcessing.Done()
+
 			})
 		}
 	}
 
 	ebitenutil.DebugPrint(screen, strconv.Itoa(int(ebiten.ActualFPS())))
-	g.Wait.Wait()
-	<-waitChannel
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
@@ -183,18 +194,8 @@ type Jump struct {
 var Status int = 0
 
 var Dead bool = false
+
 var waitKeepProcessing = new(sync.WaitGroup)
-
-func (g *Game) Update() error {
-	switch Status {
-	case 1:
-
-		g.syncCharacterMovement()
-		g.syncCharacter()
-	}
-
-	return nil
-}
 
 var ChangeFPSMode bool
 var ChangeFPSfps int64
@@ -346,10 +347,12 @@ func (st *strikeTrigger) Process() {
 		for {
 			tc := time.After(time.Millisecond * 10)
 			if Closed {
+				waitKeepProcessing.Add(1)
 				close(st.close)
 				World.Remove(st.obj)
 				st.obj = nil
 				st.Image = nil
+				waitKeepProcessing.Done()
 				break
 			}
 			if !st.triggered {
@@ -358,18 +361,17 @@ func (st *strikeTrigger) Process() {
 					if st.obj.Shape != nil && playerobj.Shape != nil {
 						if cos := st.obj.Shape.Intersection(0, 0, co.Objects[0].Shape); cos != nil {
 							st.triggered = true
-							st.s.Trigger <- st.action
+							st.s.Send(st.action)
 							st.close <- 1
 						}
 					} else {
 						st.triggered = true
-						st.s.Trigger <- st.action
+						st.s.Send(st.action)
 						st.close <- 1
 					}
 
 				}
 			}
-			waitKeepProcessing.Done()
 
 			<-tc
 		}
@@ -465,6 +467,7 @@ func (g *Game) syncCharacter() (RenderX, RenderY float64) {
 	g.mainWorld.MainCharacter.Button.Update()
 	return g.mainWorld.MainCharacter.Obj.X - 4, g.mainWorld.MainCharacter.Obj.Y
 }
+
 func (g *Game) syncCharacterMovement() {
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || Keys.A {
 		g.mainWorld.MainCharacter.SpeedX = -2
@@ -512,8 +515,6 @@ func (g *Game) syncCharacterMovement() {
 }
 
 var strikeList map[int]*strike = make(map[int]*strike)
-var strikeWaitGroup = &sync.WaitGroup{}
-
 var TriggerList = make(map[any]*strikeTrigger)
 var rePressR bool
 
@@ -523,12 +524,10 @@ func (g *Game) resetMap() {
 	}
 	g.mainWorld.Blocks = nil
 	for _, s := range strikeList {
-		if !s.Closed && World != nil && s.Obj != nil {
-			s.Close <- 1
-			//Wait Util it is Finished Process
+		if !isChanClosed(s.KillSingal) {
+			s.KillSingal <- 1
 		}
 	}
-	strikeWaitGroup.Wait()
 	strikeList = make(map[int]*strike)
 	for _, s := range TriggerList {
 		if !isChanClosed(s.close) {
