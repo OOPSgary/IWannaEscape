@@ -7,140 +7,66 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"math"
 	"sync"
 	"time"
 
-	"github.com/goki/freetype/truetype"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/text"
 	"github.com/solarlune/resolv"
 	"golang.org/x/image/font"
+	"golang.org/x/image/font/opentype"
 )
 
-var trapTrigger1 = TrapTrigger{
-	[]trapmovement{
+type Character struct {
+	Status   int // 1,2,3 for three pictures 4 for dead but not completed
+	Obj      *resolv.Object
+	Top      *resolv.Object
+	Button   *resolv.Object
+	OnGround bool
+	SpeedX   float64
+	SpeedY   float64
+	Jump     Jump
+	FaceAt   string //It can be l(eft) or r(ight)
 
-		{
-			Mode: 1,
-		},
-		{
-			Mode: 4,
-			Time: 12,
-		},
-		{
-			Mode: 3,
-			Time: 25,
-			Movement: movementPlus{
-				SizeY: 40,
-				Y:     -500,
-			},
-		}, {
-			Mode: 3,
-			Time: 52,
-			Movement: movementPlus{
-				SizeY: 4,
-				Y:     500,
-			},
-		},
-		// {
-		// 	Mode: 2,
-		// 	Time: 40,
-		// },
-		// {
-		// 	Mode: 1,
-		// 	Time: 40,
-		// },
-		{
-			Mode: 3,
-			Time: 50,
-			Movement: movementPlus{
-				X: 640,
-			},
-		},
-		{
-			Mode: 3,
-			Time: 200,
-			Movement: movementPlus{
-				X: -680,
-			},
-		}, {
-			Mode: 3,
-			Time: 25,
-			Movement: movementPlus{
-				SizeY: 40,
-				Y:     -500,
-			},
-		}, {
-			Mode: 3,
-			Time: 52,
-			Movement: movementPlus{
-				SizeY: 4,
-				Y:     500,
-			},
-		}, {
-			Mode: 3,
-			Time: 10,
-			Movement: movementPlus{
-				X: 680,
-			},
-		},
-		{
-			Mode: 3,
-			Time: 50,
-			Movement: movementPlus{
-				X:     -580,
-				Y:     -250,
-				SizeX: 8,
-				SizeY: 8,
-			},
-		},
-		{
-			Mode: 3,
-			Time: 90,
-			Movement: movementPlus{
-				Y: -400,
-			},
-		}, {
-			Mode: 3,
-			Time: 37,
-			Movement: movementPlus{
-				Y: 480,
-			},
-		}, {
-			Mode: 3,
-			Time: 100,
-			Movement: movementPlus{
-				SizeX: 17,
-			},
-		}, {
-			Mode: 2,
-			Time: 200,
-		},
-	},
+}
+type Jump struct {
+	Jump   int
+	Chance int
+	Lock   sync.Mutex
 }
 
 //go:embed resource/*
 var emFs embed.FS
+var basicFont *opentype.Font
+var startA float32
 
-var basicFont *truetype.Font
-var startA float32 = 1
+const sampleRate = 44100
 
 func init() {
 	go func() {
-		if startA <= 0 {
-			startA = 1
+		for {
+			if startA <= 0 {
+				startA = 1
+			}
+			startA -= 0.01
+			time.Sleep(time.Millisecond * 10)
 		}
-		startA -= 0.01
 	}()
-	fontData, err := emFs.ReadFile("resource/DingTalk.ttf")
+	fontData, err := emFs.ReadFile("resource/msyh.ttc")
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	// 解析字体文件
-	basicFont, err = truetype.Parse(fontData)
+	t, err := opentype.ParseCollection(fontData)
+	if err != nil {
+		log.Fatal(err)
+	}
+	basicFont, err = t.Font(0)
+	// basicFont, err = opentype.Parse(fontData)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -193,6 +119,26 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	{
+		rf, err := emFs.ReadFile("resource/Portal.png")
+		if err != nil {
+			log.Fatal(err)
+		}
+		portalImage, _, err = ebitenutil.NewImageFromReader(bytes.NewReader(rf))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	{
+		rf, err := emFs.ReadFile("resource/save.png")
+		if err != nil {
+			log.Fatal(err)
+		}
+		saveImage, _, err = ebitenutil.NewImageFromReader(bytes.NewReader(rf))
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	Blood = ebiten.NewImage(1, 1)
 	Blood.Fill(color.RGBA{255, 0, 0, 1})
 
@@ -200,18 +146,16 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	const sampleRate = 44100
+	deadSoundPlayer = audioContext.NewPlayerFromBytes(diedSound)
 
-	Sound := audio.NewContext(sampleRate)
-	{
-		reader := bytes.NewReader(diedSound)
-
-		deadSoundPlayer, err = Sound.NewPlayer(reader)
-		if err != nil {
-			log.Fatal(err)
-		}
+	strikeSound, err = emFs.ReadFile("resource/StrikeSound.wav")
+	if err != nil {
+		log.Fatal(err)
 	}
 
+}
+func newSoundPlayer(b []byte) *audio.Player {
+	return audioContext.NewPlayerFromBytes(b)
 }
 
 // Picture Image Put here
@@ -222,7 +166,11 @@ var (
 	NormalBackground *ebiten.Image
 	StrikePhoto      *ebiten.Image
 	Blood            *ebiten.Image
+	portalImage      *ebiten.Image
+	saveImage        *ebiten.Image
+	audioContext     *audio.Context = audio.NewContext(sampleRate)
 	deadSoundPlayer  *audio.Player
+	strikeSound      []byte
 )
 
 type movement struct{ x, y float64 }
@@ -284,63 +232,6 @@ func (j *Jump) AddChance() bool {
 	} else {
 		return false
 	}
-
-}
-
-type safeMap struct {
-	m    map[any]any
-	lock *sync.RWMutex
-}
-
-func CreateSafeMap(m map[any]any) *safeMap {
-	return &safeMap{
-		m:    m,
-		lock: &sync.RWMutex{},
-	}
-}
-func (m safeMap) Swap(id any, data any) any {
-	m.lock.Lock()
-	d := m.m[id]
-	m.m[id] = data
-	m.lock.Unlock()
-	return d
-}
-func (m safeMap) Store(id any, data any) {
-	m.lock.Lock()
-	m.m[id] = data
-	m.lock.Unlock()
-}
-func (m safeMap) Get(id any) any {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	return m.m[id]
-}
-func (m safeMap) SwapAndDelete(id any) any {
-	m.lock.Lock()
-	defer func() {
-		m.m[id] = nil
-		m.lock.Unlock()
-	}()
-	return m.m[id]
-}
-func (m safeMap) DeteleAll() []any {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	var dump []any = make([]any, len(m.m))
-	for _, a := range m.m {
-		dump = append(dump, a)
-	}
-	return dump
-}
-func (m safeMap) SwapAllDelete() (any, bool) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	for s, a := range m.m {
-		delete(m.m, s)
-		return a, true
-	}
-	return nil, false
-
 }
 
 func (g *Game) box() {
@@ -348,254 +239,6 @@ func (g *Game) box() {
 	g.putBlocksLine(movement{0, 0}, 0.5, 2, 30)
 	g.putBlocksLine(movement{0, 480 - 16}, 0.5, 1, 40)
 	g.putBlocksLine(movement{640 - 16, 0}, 0.5, 2, 30)
-}
-
-type strike struct {
-	Pos          movement
-	SizeX, SizeY float64
-	Angle        float64
-	Obj          *resolv.Object
-	Trigger      chan TrapTrigger
-	KillSingal   chan interface{}
-	Online       bool //Not using this again
-
-	// Close  chan interface{} //Not using this again
-	// Closed bool             //Not using this again
-	// Mutex  *sync.Mutex      //Not using this again
-}
-
-// If you need to destory this strike just Close the channel
-// Remind that delayed changes is recently not support Size
-/*
-func (s *strike) OldLoad() {
-	s.Closed = false
-	strikeWaitGroup.Add(1)
-	go func() {
-		defer strikeWaitGroup.Done()
-		for S := range s.Trigger {
-			for _, a := range S.Movement {
-				if s.Closed {
-					s.Mutex.Lock()
-
-					if !s.Closed && World != nil && s.Obj != nil {
-						World.Remove(s.Obj)
-					} else {
-						s.Mutex.Unlock()
-						return
-					}
-					s.Mutex.Unlock()
-					return
-				}
-				switch a.Mode {
-				case 1:
-
-					time.Sleep(time.Millisecond * time.Duration(a.Time) * 10)
-					s.Mutex.Lock()
-					if !s.Closed && World != nil && s.Obj != nil {
-						World.Add(s.Obj)
-
-					} else {
-						s.Mutex.Unlock()
-						return
-					}
-					s.Online = true
-					s.Mutex.Unlock()
-				case 2:
-					time.Sleep(time.Millisecond * time.Duration(a.Time) * 10)
-					s.Mutex.Lock()
-					if !s.Closed && World != nil && s.Obj != nil {
-						World.Remove(s.Obj)
-					} else {
-						s.Mutex.Unlock()
-						return
-					}
-					s.Online = false
-					s.Mutex.Unlock()
-				case 3:
-					if a.Time == 0 {
-
-						s.Angle = a.Movement.Angle
-						if a.Movement.X > 0 {
-							s.Pos.x = a.Movement.X
-						}
-						if a.Movement.Y > 0 {
-							s.Pos.y = a.Movement.Y
-						}
-						s.Mutex.Lock()
-
-						if !s.Closed && World != nil && s.Obj != nil {
-							World.Remove(s.Obj)
-						} else {
-							s.Mutex.Unlock()
-							return
-						}
-						s.Mutex.Unlock()
-
-						if a.Movement.SizeX > 0 {
-							s.SizeX = a.Movement.SizeX
-						}
-						if a.Movement.SizeY > 0 {
-							s.SizeY = a.Movement.SizeY
-						}
-						if a.Movement.SizeX > 0 && a.Movement.SizeY > 0 || (a.Movement.SizeX > 0 || a.Movement.SizeY > 0) {
-							s.Obj = resolv.NewObject(s.Pos.x, s.Pos.y, 32*s.SizeX, 32*s.SizeY, "deadly")
-							s.Obj.SetShape(resolv.NewConvexPolygon(
-								0, 0,
-
-								s.Obj.W/2, 0,
-								s.Obj.W/2+1, 0,
-								0, s.Obj.H,
-								s.Obj.W, s.Obj.H,
-							))
-							World.Add(s.Obj)
-						}
-						s.Obj.X = s.Pos.x
-						s.Obj.Y = s.Pos.y
-						s.Mutex.Lock()
-						if s.Obj != nil {
-							s.Obj.Update()
-						}
-						s.Mutex.Unlock()
-					} else {
-						sizeX := s.SizeX
-						sizeY := s.SizeY
-						for i := float64(1); i <= float64(a.Time); i++ {
-							t := time.After(time.Millisecond * 10)
-							s.Angle += a.Movement.Angle / float64(a.Time)
-							if a.Movement.X != 0 {
-								s.Pos.x += a.Movement.X / float64(a.Time)
-							}
-							if a.Movement.Y != 0 {
-								s.Pos.y += a.Movement.Y / float64(a.Time)
-							}
-
-							if a.Movement.SizeX > 0 && a.Movement.SizeY > 0 || (a.Movement.SizeX > 0 || a.Movement.SizeY > 0) {
-								newSizeX := func() float64 {
-									if a.Movement.SizeX > 0 {
-										return (a.Movement.SizeX-sizeX)/float64(a.Time)*i + sizeX
-									}
-									return sizeX
-								}()
-								newSizeY := func() float64 {
-									if a.Movement.SizeY > 0 {
-										return (a.Movement.SizeY-sizeY)/float64(a.Time)*i + sizeY
-									}
-									return sizeY
-								}()
-								s.Mutex.Lock()
-
-								if !s.Closed && World != nil && s.Obj != nil {
-									World.Remove(s.Obj)
-
-								} else {
-									s.Mutex.Unlock()
-									return
-								}
-								s.Mutex.Unlock()
-
-								s.Obj = resolv.NewObject(s.Pos.x, s.Pos.y, 32*newSizeX, 32*newSizeY, "deadly")
-								s.Obj.SetShape(resolv.NewConvexPolygon(
-									0, 0,
-
-									s.Obj.W/2, 0,
-									s.Obj.W/2+1, 0,
-									0, s.Obj.H,
-									s.Obj.W, s.Obj.H,
-								))
-
-								s.Mutex.Lock()
-								if !s.Closed && World != nil && s.Obj != nil {
-									World.Add(s.Obj)
-								} else {
-									s.Mutex.Unlock()
-									return
-								}
-								s.Mutex.Unlock()
-
-								s.SizeX = newSizeX
-								s.SizeY = newSizeY
-							} else {
-								s.Obj.X = s.Pos.x
-								s.Obj.Y = s.Pos.y
-
-							}
-							s.Mutex.Lock()
-							if s.Obj != nil {
-								s.Obj.Update()
-							}
-							s.Mutex.Unlock()
-							<-t
-						}
-					}
-				case 4:
-					time.Sleep(time.Millisecond * time.Duration(a.Time) * 10)
-				}
-			}
-		}
-	}()
-	go func() {
-		<-s.Close
-		if s.Obj != nil && World != nil {
-			s.Mutex.Lock()
-			World.Remove(s.Obj)
-			s.Mutex.Unlock()
-		}
-		s.Online = false
-		s.Closed = true
-		close(s.Trigger)
-		close(s.Close)
-	}()
-}
-*/
-func (s *strike) Render(screen *ebiten.Image) {
-	if s.Online {
-		geo := &ebiten.DrawImageOptions{}
-		// {
-		// 	s2 := StrikePhoto.Bounds().Size()
-		// 	geo.GeoM.Translate(-float64(s2.X)/2, -float64(s2.Y)/2)
-		// }
-
-		geo.GeoM.Rotate(getRadian(s.Angle))
-		geo.GeoM.Scale(s.SizeX, s.SizeY)
-		geo.GeoM.Translate(s.Obj.X, s.Obj.Y)
-		screen.DrawImage(StrikePhoto, geo)
-	}
-
-}
-func NewStrike(Pos movement, SizeX, SizeY float64) *strike {
-	obj := resolv.NewObject(Pos.x, Pos.y, 4*8*SizeX, 4*8*SizeY, "deadly")
-	obj.Update()
-	obj.SetShape(resolv.NewConvexPolygon(
-		0, 0,
-
-		obj.W/2, 0,
-		obj.W/2+1, 0,
-		0, obj.H,
-		obj.W, obj.H,
-	))
-	// obj := resolv.NewObject(Pos.x, Pos.y, 64, 32, "deadly")
-	// obj.SetShape(resolv.NewConvexPolygon(
-	// 	0, 0,
-	// 	0, 0,
-	// 	0, 64,
-	// 	64, 64,
-	// 	64, 64,
-	// ))
-	obj.Update()
-
-	return &strike{
-		Pos:     Pos,
-		SizeX:   SizeX,
-		SizeY:   SizeY,
-		Angle:   0,
-		Obj:     obj,
-		Trigger: make(chan TrapTrigger),
-		// Close:      make(chan interface{}),
-		// Closed:     false,
-		KillSingal: make(chan interface{}),
-		Online:     false,
-		// Mutex:      &sync.Mutex{},
-	}
 }
 
 // DrawString函数作为绘画文字
@@ -608,8 +251,8 @@ func DrawString(s string, size int, X, Y, Xs, Ys, turn float64, c color.Color, I
 			return X - float64(change)*Xs
 		}
 		return X
-	}(mid), Y+float64(y)*Ys, Xs, Ys, turn, c)
-	f := GetFont(size)
+	}(mid), Y+float64(y)*Ys, Xs/2, Ys/2, turn, c)
+	f := GetFont(size * 2)
 	text.DrawWithOptions(Image, s, f, op)
 	return y
 }
@@ -630,215 +273,365 @@ func drawMidTextLineByLine(startHeight, size int, c color.Color, Image *ebiten.I
 	return startHeight
 }
 
-type block struct {
-	Obj    *resolv.Object
-	Size   float64
-	Rorate int
-}
-
-func (g *Game) newBlock(pos movement, size float64, rorate int) *block {
-	obj := resolv.NewObject(float64(pos.x), float64(pos.y), 32*size, 32*size, "Stopper")
-	World.Add(obj)
-
-	b := block{
-		Obj:    obj,
-		Size:   size,
-		Rorate: rorate,
-	}
-	g.mainWorld.Blocks = append(g.mainWorld.Blocks, &b)
-	return &b
-}
-
-// 1 stands for X-Line()--- 2 stands for Y-Line |
-func (g *Game) putBlocksLine(StartPos movement, Size float64, Line int, amount int) {
-	for i := 0; i < amount; i++ {
-		if Line == 1 {
-			g.newBlock(movement{StartPos.x + float64(i)*Size*32, StartPos.y}, Size, 0)
-		} else {
-			g.newBlock(movement{StartPos.x, StartPos.y + float64(i)*Size*32}, Size, 0)
-		}
-	}
-
-}
-func (b block) Draw(screen *ebiten.Image) {
-	geo := &ebiten.DrawImageOptions{}
-	geo.GeoM.Scale(b.Size, b.Size)
-	geo.GeoM.Translate(b.Obj.X, b.Obj.Y)
-	geo.GeoM.Rotate(getRadian(float64(b.Rorate)))
-	screen.DrawImage(Stopper, geo)
-}
-
 var errSendOnClosedChannel = errors.New("send on closed chan")
 
-func (s *strike) Send(t TrapTrigger) error {
-	select {
-	case <-s.KillSingal:
-		return errSendOnClosedChannel
-	default:
-		s.Trigger <- t
-	}
-	return nil
-}
-func (s *strike) Load() {
-	go s.load()
-}
-func (s *strike) load() {
-	for {
-		if s.process() {
-			waitKeepProcessing.Add(1)
-			close(s.Trigger)
-			if !isChanClosed(s.KillSingal) {
-				close(s.KillSingal)
-			}
-			if s.Online {
-				World.Remove(s.Obj)
-			}
-			waitKeepProcessing.Done()
-			break
-		}
-	}
-}
-func (s *strike) process() (stop bool) {
-	var a TrapTrigger
-	select {
-	case a = <-s.Trigger:
-	case <-s.KillSingal:
-		return true
-	}
-	for _, action := range a.Movement {
-		log.Println(action)
-		switch action.Mode {
-		case 1:
-			if s.handlerAppear(action) {
-				return true
-			}
-		case 2:
-			if s.handlerDisAppear(action) {
-				return true
-			}
-		case 3:
-			if s.handlerMovement(action) {
-				return true
-			}
-		case 4:
-			if s.handlerWaiting(action) {
-				return true
-			}
-		}
-	}
-	return false
-}
-func (s *strike) handlerAppear(action trapmovement) (stop bool) {
-	select {
-	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
-		World.Add(s.Obj)
-		s.Online = true
-		return false
-	case <-s.KillSingal:
-		return true
-	}
-}
-func (s *strike) handlerDisAppear(action trapmovement) (stop bool) {
-	select {
-	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
-		World.Remove(s.Obj)
-		s.Online = false
-		return false
-	case <-s.KillSingal:
-		return true
-	}
-}
-func (s *strike) handlerMovement(action trapmovement) (stop bool) {
-	PreferData := struct {
-		sizeX, sizeY float64
-	}{
-		sizeX: s.SizeX,
-		sizeY: s.SizeY,
-	}
-	delayProcess := func() {
-		s.Pos.x += action.Movement.X / float64(action.Time)
-		s.Pos.y += action.Movement.Y / float64(action.Time)
-		s.SizeX += (ifPositiveNum(s.SizeX, action.Movement.SizeX) - PreferData.sizeX) / float64(action.Time)
-		s.SizeY += (ifPositiveNum(s.SizeY, action.Movement.SizeY) - PreferData.sizeY) / float64(action.Time)
-		s.Angle += action.Movement.Angle / action.Time
-		s.Obj.X = s.Pos.x
-		s.Obj.Y = s.Pos.y
-		s.Obj.W = 32 * s.SizeX
-		s.Obj.H = 32 * s.SizeY
-		s.Obj.SetShape(resolv.NewConvexPolygon(
-			0, 0,
-
-			s.Obj.W/2, 0,
-			s.Obj.W/2+1, 0,
-			0, s.Obj.H,
-			s.Obj.W, s.Obj.H,
-		))
-		// s.Obj.Shape.SetScale(s.SizeX, s.SizeY)
-		s.Obj.Shape.SetRotation(s.Angle)
-		s.Obj.Update()
-	}
-	if action.Time <= 0 {
-		s.Pos.x += action.Movement.X
-		s.Pos.y += action.Movement.Y
-		s.SizeX = ifPositiveNum(s.SizeX, action.Movement.SizeX)
-		s.SizeY = ifPositiveNum(s.SizeY, action.Movement.SizeY)
-		s.Angle += action.Movement.Angle
-		s.Obj.X = s.Pos.x
-		s.Obj.Y = s.Pos.y
-		s.Obj.W = 32 * s.SizeX
-		s.Obj.H = 32 * s.SizeY
-		s.Obj.SetShape(resolv.NewConvexPolygon(
-			0, 0,
-
-			s.Obj.W/2, 0,
-			s.Obj.W/2+1, 0,
-			0, s.Obj.H,
-			s.Obj.W, s.Obj.H,
-		))
-		// s.Obj.Shape.SetScale(s.SizeX, s.SizeY)
-		s.Obj.Shape.SetRotation(s.Angle)
-		s.Obj.Update()
+func (g *Game) syncExtraKeys() {
+	if ebiten.IsKeyPressed(ebiten.KeyR) {
+		Keys.R = true
 	} else {
-		for i := 1; i < int(action.Time); i++ {
-			select {
-			case <-time.After(time.Millisecond * 10):
-				delayProcess()
-			case <-s.KillSingal:
-				return true
-			}
+		Keys.R = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeySpace) {
+		Keys.Space = true
+	} else {
+		Keys.Space = false
+		g.mainWorld.MainCharacter.Jump.ResetChance()
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyA) {
+		Keys.A = true
+	} else {
+		Keys.A = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyD) {
+		Keys.D = true
+	} else {
+		Keys.D = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyF1) && !Keys.F1.Pressed {
+		Keys.F1.Press = true
+	} else if !ebiten.IsKeyPressed(ebiten.KeyF1) {
+		Keys.F1.Pressed = false
+	} else {
+		Keys.F1.Press = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyF11) && !Keys.F11.Pressed {
+		Keys.F11.Press = true
+	} else if !ebiten.IsKeyPressed(ebiten.KeyF11) {
+		Keys.F11.Pressed = false
+	} else {
+		Keys.F11.Press = false
+	}
+}
+func (g *Game) resetMap() {
+	for _, o := range g.mainWorld.Blocks {
+		World.Remove(o.Obj)
+	}
+	g.mainWorld.Blocks = make([]*block, 0)
+	for _, s := range strikeList {
+		if !isChanClosed(s.KillSingal) {
+			s.KillSingal <- 1
 		}
 	}
-	return false
+	strikeList = make(map[any]*strike)
+	for _, s := range TriggerList {
+		if !isChanClosed(s.KillSingal) {
+			s.KillSingal <- 1
+		}
+
+	}
+	TriggerList = make(map[any]*strikeTrigger)
+
 }
-func (s *strike) handlerWaiting(action trapmovement) (stop bool) {
+func isChanClosed(c chan any) bool {
 	select {
-	case <-s.KillSingal:
-		return true
-	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
+	case _, ok := <-c:
+		return !ok
+	default:
 		return false
 	}
 }
-func ifPositiveNum(value, replaceValue float64) float64 {
-	if replaceValue > 0 {
-		return replaceValue
+func GetFont(size int) font.Face {
+	fontData.lock.RLock()
+	if fontData.fonts[size] != nil {
+		defer fontData.lock.RUnlock()
+		return fontData.fonts[size]
 	}
-	return value
+	fontData.lock.RUnlock()
+	face, err := opentype.NewFace(basicFont, &opentype.FaceOptions{
+		Size:    float64(size),
+		DPI:     300,
+		Hinting: font.HintingFull,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fontData.lock.Lock()
+	fontData.fonts[size] = face
+	fontData.lock.Unlock()
+	return face
 }
 
-type TrapTrigger struct {
-	Movement []trapmovement
+// 角度->弧度 转换
+func getRadian(turn float64) float64 {
+	return math.Pi / 180 * turn
 }
-type trapmovement struct {
-	Mode int
-	// 1 for appear (time will be used to sleep before it run)
-	// 2 for dispear (time will be used to sleep before it run)
-	// 3 for movement+rorate(Angle)
-	// 4 for just sleep
-	Time     float64 // Counted in 10Mill Must be integer
-	Movement movementPlus
+
+// 制作针对文字的位移
+// Xs,Ys为横向纵向拉伸程序
+func makeGeo(X, Y, Xs, Ys, turn float64, c color.Color) *ebiten.DrawImageOptions {
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Rotate(getRadian(turn))
+	op.GeoM.Scale(Xs, Ys)
+	op.GeoM.Translate(X, Y)
+	if c != nil {
+		op.ColorScale.ScaleWithColor(c)
+	}
+
+	return op
 }
-type movementPlus struct {
-	Angle        float64
-	X, Y         float64
-	SizeX, SizeY float64
+
+var Keys struct {
+	R     bool
+	Space bool
+	A, D  bool
+	F1    struct {
+		Press   bool
+		Pressed bool
+	}
+	F11 struct {
+		Press   bool
+		Pressed bool
+	}
+}
+
+func TypeNumer(key ebiten.Key, num int64) int64 {
+	if key-ebiten.Key0 >= 0 || key-ebiten.Key0 <= 9 {
+		if ebiten.IsKeyPressed(key) && !KeyPressed[key] {
+			num = num*10 + int64(key-ebiten.Key0)
+			KeyPressed[key] = true
+		}
+		if !ebiten.IsKeyPressed(key) {
+			KeyPressed[key] = false
+		}
+
+	}
+	return num
+}
+
+var NumKeys = []ebiten.Key{
+	ebiten.Key0,
+	ebiten.Key1,
+	ebiten.Key2,
+	ebiten.Key3,
+	ebiten.Key4,
+	ebiten.Key5,
+	ebiten.Key6,
+	ebiten.Key7,
+	ebiten.Key8,
+	ebiten.Key9,
+}
+
+type fontdata struct {
+	lock  *sync.RWMutex
+	fonts map[int]font.Face
+}
+
+var fontData fontdata = fontdata{
+	lock:  new(sync.RWMutex),
+	fonts: make(map[int]font.Face),
+}
+
+func (g *Game) resetCharacter() {
+	if g.mainWorld.MainCharacter.Obj != nil {
+		g.characterLeave()
+	}
+
+	obj := resolv.NewObject(0, 0, 17, 21, "character")
+	obj.SetShape(resolv.NewConvexPolygon(
+		0, 0,
+		0, 0,
+		17, 0,
+		17, 21,
+		0, 21,
+	))
+	top := resolv.NewObject(0, 0, 15, 1, "character")
+	top.SetShape(resolv.NewConvexPolygon(
+		0, 0,
+		0, 0,
+		15, 0,
+		15, 1,
+		0, 1,
+	))
+	button := resolv.NewObject(0, 0, 15, 1, "character")
+	button.SetShape(resolv.NewConvexPolygon(
+		0, 0,
+		0, 0,
+		15, 0,
+		15, 1,
+		0, 1,
+	))
+	g.mainWorld.MainCharacter = Character{
+		Status: 1,
+		Obj:    obj,
+		Top:    top,
+		Button: button,
+	}
+}
+func (g *Game) moveCharacter(x, y float64) {
+	g.mainWorld.MainCharacter.Obj.X = x + 4
+	g.mainWorld.MainCharacter.Obj.Y = y
+	g.mainWorld.MainCharacter.Top.X = x + 5
+	g.mainWorld.MainCharacter.Top.Y = y
+	g.mainWorld.MainCharacter.Button.X = x + 5
+	g.mainWorld.MainCharacter.Button.Y = y + 21
+	g.mainWorld.MainCharacter.Obj.Update()
+	g.mainWorld.MainCharacter.Top.Update()
+	g.mainWorld.MainCharacter.Button.Update()
+}
+func (g *Game) characterJoin() {
+	World.Add(g.mainWorld.MainCharacter.Obj)
+	World.Add(g.mainWorld.MainCharacter.Top)
+	World.Add(g.mainWorld.MainCharacter.Button)
+}
+func (g *Game) characterLeave() {
+	World.Remove(g.mainWorld.MainCharacter.Obj)
+	World.Remove(g.mainWorld.MainCharacter.Top)
+	World.Remove(g.mainWorld.MainCharacter.Button)
+}
+
+func (g *Game) syncCharacter() (RenderX, RenderY float64) {
+
+	x, y := g.mainWorld.MainCharacter.SpeedX, g.mainWorld.MainCharacter.SpeedY
+	if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "deadly"); collision != nil {
+		if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(x, y, collision.Objects[0].Shape); contactSet != nil {
+			Dead = true
+		}
+	}
+
+	if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "Stopper"); collision != nil {
+		s := collision.SlideAgainstCell(collision.Cells[0], "Stopper")
+		if s != nil {
+			x = s.X()
+		} else {
+			x = 0
+		}
+		// x = collision.ContactWithObject(collision.Objects[0]).X()
+		g.mainWorld.MainCharacter.SpeedX = 0
+	}
+	if collisionTop := g.mainWorld.MainCharacter.Top.Check(x, y, "Stopper"); collisionTop != nil {
+		if dy := collisionTop.ContactWithObject(collisionTop.Objects[0]).Y(); dy != 0 {
+			y = dy
+			g.mainWorld.MainCharacter.SpeedY = 0
+		}
+	}
+	if collisionButton := g.mainWorld.MainCharacter.Button.Check(x, y, "Stopper"); collisionButton != nil && g.mainWorld.MainCharacter.SpeedY >= 0 && g.mainWorld.MainCharacter.Button.Bottom() < collisionButton.Objects[0].Y+2 {
+
+		g.mainWorld.MainCharacter.Jump.Reset()
+		if dy := collisionButton.ContactWithObject(collisionButton.Objects[0]).Y(); dy != 0 {
+			y = dy
+			g.mainWorld.MainCharacter.SpeedY = 0
+		}
+
+	} else {
+
+		//if collision := g.mainWorld.MainCharacter.Button.Check(x, y+1, "Stopper"); collision == nil
+		// if g.mainWorld.MainCharacter.SpeedY <= 4 && g.mainWorld.MainCharacter.SpeedY >= 0 {
+		// 	g.mainWorld.MainCharacter.SpeedY += 0.15
+
+		// } else if g.mainWorld.MainCharacter.SpeedY <= 0 {
+		// 	g.mainWorld.MainCharacter.SpeedY += 0.2
+		// }
+
+		if g.mainWorld.MainCharacter.SpeedY <= 5 && g.mainWorld.MainCharacter.SpeedY >= 0 {
+			g.mainWorld.MainCharacter.SpeedY += 0.25
+
+		} else if g.mainWorld.MainCharacter.SpeedY <= 0 {
+			g.mainWorld.MainCharacter.SpeedY += 0.2
+		}
+		// y = g.mainWorld.MainCharacter.SpeedY
+
+	}
+
+	g.mainWorld.MainCharacter.Obj.X += x
+	g.mainWorld.MainCharacter.Obj.Y += y
+
+	g.mainWorld.MainCharacter.Top.X += x
+	g.mainWorld.MainCharacter.Top.Y += y
+	g.mainWorld.MainCharacter.Button.X += x
+	g.mainWorld.MainCharacter.Button.Y += y
+	g.mainWorld.MainCharacter.Obj.Update()
+	g.mainWorld.MainCharacter.Top.Update()
+	g.mainWorld.MainCharacter.Button.Update()
+	for _, sl := range strikeList {
+		if sl.Online {
+			if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(0, 0, sl.Shape); contactSet != nil {
+				Dead = true
+			}
+		}
+	}
+	return g.mainWorld.MainCharacter.Obj.X - 4, g.mainWorld.MainCharacter.Obj.Y
+}
+
+func (g *Game) syncCharacterMovement() {
+	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || Keys.A {
+		g.mainWorld.MainCharacter.SpeedX = -2
+		if g.mainWorld.MainCharacter.Status < 2 {
+			g.mainWorld.MainCharacter.Status++
+		} else {
+			g.mainWorld.MainCharacter.Status = 1
+		}
+		g.mainWorld.MainCharacter.FaceAt = "l"
+	} else if ebiten.IsKeyPressed(ebiten.KeyArrowRight) || Keys.D {
+		g.mainWorld.MainCharacter.SpeedX = 2
+		if g.mainWorld.MainCharacter.Status < 2 {
+			g.mainWorld.MainCharacter.Status++
+		} else {
+			g.mainWorld.MainCharacter.Status = 1
+		}
+		g.mainWorld.MainCharacter.FaceAt = "r"
+	} else {
+		if g.mainWorld.MainCharacter.SpeedX >= 1 {
+			g.mainWorld.MainCharacter.SpeedX -= 1
+			if g.mainWorld.MainCharacter.Status < 2 {
+				g.mainWorld.MainCharacter.Status++
+			} else {
+				g.mainWorld.MainCharacter.Status = 1
+			}
+		} else if g.mainWorld.MainCharacter.SpeedX <= -1 {
+			g.mainWorld.MainCharacter.SpeedX += 1
+			if g.mainWorld.MainCharacter.Status < 2 {
+				g.mainWorld.MainCharacter.Status++
+			} else {
+				g.mainWorld.MainCharacter.Status = 1
+			}
+		} else {
+			g.mainWorld.MainCharacter.Status = 1
+			g.mainWorld.MainCharacter.SpeedX = 0
+		}
+	}
+	if Keys.Space {
+		if g.mainWorld.MainCharacter.Jump.Update() {
+			g.mainWorld.MainCharacter.SpeedY = -4
+		} else if g.mainWorld.MainCharacter.Jump.AddChance() {
+			g.mainWorld.MainCharacter.SpeedY -= 0.05
+		}
+	}
+}
+
+var strikeList = make(map[any]*strike)
+var TriggerList = make(map[any]*strikeTrigger)
+var rePressR bool
+
+func (g *Game) DrawAll(screen *ebiten.Image) {
+	renderStrikes(strikeList, screen)
+	renderTrigger(TriggerList, screen)
+	g.drawBox(screen)
+	if !Dead {
+		f1 := func(s string) float64 {
+			if g.mainWorld.MainCharacter.FaceAt == "l" {
+				return g.mainWorld.MainCharacter.Obj.X + 21
+			}
+			return g.mainWorld.MainCharacter.Obj.X - 4
+		}
+		f2 := func(s string) float64 {
+			if g.mainWorld.MainCharacter.FaceAt == "l" {
+				return -1
+			}
+			return 1
+		}
+		fa := g.mainWorld.MainCharacter.FaceAt
+		screen.DrawImage(Kid[g.mainWorld.MainCharacter.Status],
+			makeGeo(f1(fa), g.mainWorld.MainCharacter.Obj.Y, f2(fa), 1, 0, nil))
+	}
 }

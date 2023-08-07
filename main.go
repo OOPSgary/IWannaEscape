@@ -45,14 +45,7 @@ func main() {
 	ebiten.SetWindowTitle("IJustwantToEscape")
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetTPS(120)
-	ebiten.SetVsyncEnabled(false)
-	go func() {
-		if ebiten.IsFocused() {
-
-		} else {
-
-		}
-	}()
+	log.Println("Config Will saved to Config.json")
 	var NewGame *app.Game = &app.Game{
 		Wait: &sync.WaitGroup{},
 	}
