@@ -45,7 +45,6 @@ func main() {
 	ebiten.SetWindowTitle("IJustwantToEscape")
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetTPS(120)
-	ebiten.SetVsyncEnabled(false)
 	go func() {
 		if ebiten.IsFocused() {
 

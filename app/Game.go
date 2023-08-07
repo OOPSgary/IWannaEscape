@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"math"
 	"strconv"
@@ -25,30 +26,26 @@ type Game struct {
 	Wait   *sync.WaitGroup
 }
 
-var mainProcess *sync.WaitGroup = &sync.WaitGroup{}
-
 func (g *Game) Update() error {
-	mainProcess.Wait()
 	switch Status {
 	case 1:
-		g.syncCharacterMovement()
-		g.syncCharacter()
+		if g.mainWorld.MainCharacter.Obj != nil {
+			g.syncCharacterMovement()
+			g.syncCharacter()
+		}
+
 	}
 
 	return nil
 }
+
 func (g *Game) Draw(screen *ebiten.Image) {
-	// var waitChannel <-chan time.Time
-	// if !ebiten.IsVsyncEnabled() && ChangeFPSfps > 0 {
-	// 	waitChannel = time.After(time.Second / time.Duration(ChangeFPSfps))
-	// }
 	g.screen = screen
 	screen.DrawImage(NormalBackground, nil)
 	g.syncExtraKeys()
 	switch Status {
 	case 0:
 		//I JUST WANT TO ESCAPE TITLE
-
 		if Dead {
 			xg, yg := midImage(GameOver)
 			opG := &ebiten.DrawImageOptions{}
@@ -59,7 +56,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			if Keys.R && !rePressR {
 				rePressR = true
 				Status = 1
-				mainProcess.Add(1)
 			}
 			if !Keys.R {
 				rePressR = false
@@ -69,30 +65,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				deadSoundPlayer.Play()
 			})
 		} else {
-			drawMidTextLineByLine(0, 10, color.Black, screen, "Welcome to", "I JUST WANT TO ESCAPE", "按下F1可调整最大FPS")
+
+			drawMidTextLineByLine(0, 10, color.Black, screen, "Welcome to", "I JUST WANT TO ESCAPE", "F1: VSync模式切换 F11: 全屏")
+
 			g.HomePage.Update()
 			g.HomePage.Draw(screen)
 		}
-		if ebiten.IsKeyPressed(ebiten.KeyF1) && !ChaneFPSPressed {
-			ChaneFPSPressed = true
-			if !ChangeFPSMode {
-				ChangeFPSMode = true
-			} else {
-				if ChangeFPSfps > 0 {
-					ebiten.SetVsyncEnabled(false)
-				}
-				ChangeFPSMode = false
-			}
-		} else if !ebiten.IsKeyPressed(ebiten.KeyF1) {
-			ChaneFPSPressed = false
-		}
-		if ChangeFPSMode {
-			drawMidTextLineByLine(300, 5, color.Black, screen, "请输入目标FPS 再次按F1确认 按回车键重置", strconv.FormatInt(ChangeFPSfps, 10))
-			ChangeFps()
-		}
+
 	case 1:
 		if Keys.R && !rePressR {
-			mainProcess.Add(1)
 			rePressR = true
 			CallExtra(0)
 			CallExtra(1)
@@ -123,8 +104,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				trapTrigger1,
 				0.2,
 			)
+			g.characterJoin()
 			go TriggerList[0].Process()
-			mainProcess.Done()
 		})
 
 		//Setting up main Wide-World
@@ -165,52 +146,37 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			})
 		}
 	}
-
-	ebitenutil.DebugPrint(screen, strconv.Itoa(int(ebiten.ActualFPS())))
+	Vsync := ebiten.IsVsyncEnabled()
+	if Keys.F1.Press && !Keys.F1.Pressed {
+		Keys.F1.Pressed = true
+		if Vsync {
+			ebiten.SetVsyncEnabled(false)
+		} else {
+			ebiten.SetVsyncEnabled(true)
+		}
+	}
+	fps := strconv.Itoa(int(ebiten.ActualFPS()))
+	ebitenutil.DebugPrint(screen, fmt.Sprintf("FPS:%v VSync:%t", fps, Vsync))
+	if Keys.F11.Press && !Keys.F11.Pressed {
+		Keys.F11.Pressed = true
+		if ebiten.IsFullscreen() {
+			ebiten.SetFullscreen(false)
+		} else {
+			ebiten.SetFullscreen(true)
+		}
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
 	return 640, 480
 }
 
-type Character struct {
-	Status   int // 1,2,3 for three pictures 4 for dead but not completed
-	Obj      *resolv.Object
-	Top      *resolv.Object
-	Button   *resolv.Object
-	OnGround bool
-	SpeedX   float64
-	SpeedY   float64
-	Jump     Jump
-	FaceAt   string //It can be l(eft) or r(ight)
-
-}
-type Jump struct {
-	Jump   int
-	Chance int
-	Lock   sync.Mutex
-}
-
 var Status int = 0
-
 var Dead bool = false
-
 var waitKeepProcessing = new(sync.WaitGroup)
-
-var ChangeFPSMode bool
-var ChangeFPSfps int64
-var ChaneFPSPressed bool
 var WaitTime time.Duration
 var KeyPressed = make(map[ebiten.Key]bool)
 
-func ChangeFps() {
-	for _, k := range NumKeys {
-		ChangeFPSfps = TypeNumer(k, ChangeFPSfps)
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyEnter) {
-		ChangeFPSfps = 0
-	}
-}
 func (g *Game) drawBox(screen *ebiten.Image) {
 	for _, a := range g.mainWorld.Blocks {
 		a.Draw(screen)
@@ -261,6 +227,10 @@ var fontData fontdata = fontdata{
 }
 
 func (g *Game) resetCharacter() {
+	if g.mainWorld.MainCharacter.Obj != nil {
+		g.characterLeave()
+	}
+
 	obj := resolv.NewObject(0, 0, 17, 21-2*2, "character")
 	obj.SetShape(resolv.NewConvexPolygon(
 		0, 0,
@@ -285,9 +255,6 @@ func (g *Game) resetCharacter() {
 		15, 1,
 		0, 1,
 	))
-	World.Add(obj)
-	World.Add(top)
-	World.Add(button)
 	g.mainWorld.MainCharacter = Character{
 		Status: 1,
 		Obj:    obj,
@@ -296,12 +263,6 @@ func (g *Game) resetCharacter() {
 	}
 }
 func (g *Game) moveCharacter(x, y float64) {
-	// g.mainWorld.MainCharacter.Obj.X = x + 4
-	// g.mainWorld.MainCharacter.Obj.Y = y + 19
-	// g.mainWorld.MainCharacter.Top.X = x + 4
-	// g.mainWorld.MainCharacter.Top.Y = y
-	// g.mainWorld.MainCharacter.Button.X = x + 4
-	// g.mainWorld.MainCharacter.Button.Y = y + 21
 	g.mainWorld.MainCharacter.Obj.X = x + 4
 	g.mainWorld.MainCharacter.Obj.Y = y + 2
 	g.mainWorld.MainCharacter.Top.X = x + 5
@@ -312,112 +273,32 @@ func (g *Game) moveCharacter(x, y float64) {
 	g.mainWorld.MainCharacter.Top.Update()
 	g.mainWorld.MainCharacter.Button.Update()
 }
-
-type strikeTrigger struct {
-	s         *strike
-	Press     *ebiten.Key
-	obj       *resolv.Object
-	action    TrapTrigger
-	triggered bool
-	Image     *ebiten.Image
-	ImageA    float32
-	close     chan any
+func (g *Game) characterJoin() {
+	World.Add(g.mainWorld.MainCharacter.Obj)
+	World.Add(g.mainWorld.MainCharacter.Top)
+	World.Add(g.mainWorld.MainCharacter.Button)
 }
-
-func NewTrigger(s *strike, key *ebiten.Key, obj *resolv.Object, Image *ebiten.Image, action TrapTrigger, RGBA float32) *strikeTrigger {
-	return &strikeTrigger{
-		s:         s,
-		Press:     key,
-		obj:       obj,
-		action:    action,
-		triggered: false,
-		close:     make(chan any),
-		Image:     Image,
-		ImageA:    RGBA,
-	}
-}
-func (st *strikeTrigger) Process() {
-	var Closed bool
-	go func() {
-		<-st.close
-		Closed = true
-	}()
-	if st.obj != nil {
-		World.Add(st.obj)
-		for {
-			tc := time.After(time.Millisecond * 10)
-			if Closed {
-				waitKeepProcessing.Add(1)
-				close(st.close)
-				World.Remove(st.obj)
-				st.obj = nil
-				st.Image = nil
-				waitKeepProcessing.Done()
-				break
-			}
-			if !st.triggered {
-				if co := st.obj.Check(0, 0, "character"); co != nil {
-					playerobj := co.Objects[0]
-					if st.obj.Shape != nil && playerobj.Shape != nil {
-						if cos := st.obj.Shape.Intersection(0, 0, co.Objects[0].Shape); cos != nil {
-							st.triggered = true
-							st.s.Send(st.action)
-							st.close <- 1
-						}
-					} else {
-						st.triggered = true
-						st.s.Send(st.action)
-						st.close <- 1
-					}
-
-				}
-			}
-
-			<-tc
-		}
-
-	} else {
-		for {
-			if Closed {
-				close(st.close)
-				break
-			}
-			tc := time.After(time.Millisecond * 10)
-			if !st.triggered {
-				if ebiten.IsKeyPressed(*st.Press) {
-					st.triggered = true
-					st.s.Trigger <- st.action
-					st.close <- 1
-				}
-			}
-
-			<-tc
-		}
-
-	}
-
-}
-
-// it must be a Object trigger if it Renders
-func (st *strikeTrigger) Render(screen *ebiten.Image) {
-	// make sure that im not stupid
-	if st.obj != nil && st.Image != nil {
-		geo := &ebiten.DrawImageOptions{}
-		geo.GeoM.Translate(st.obj.X, st.obj.Y)
-		geo.ColorScale.SetA(st.ImageA)
-		screen.DrawImage(st.Image, geo)
-	}
+func (g *Game) characterLeave() {
+	World.Remove(g.mainWorld.MainCharacter.Obj)
+	World.Remove(g.mainWorld.MainCharacter.Top)
+	World.Remove(g.mainWorld.MainCharacter.Button)
 }
 
 func (g *Game) syncCharacter() (RenderX, RenderY float64) {
 
 	x, y := g.mainWorld.MainCharacter.SpeedX, g.mainWorld.MainCharacter.SpeedY
-	if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "deadly"); collision != nil {
-		if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(x, y, collision.Objects[0].Shape); contactSet != nil {
-			Dead = true
+	// if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "deadly"); collision != nil {
+	// 	if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(x, y, collision.Objects[0].Shape); contactSet != nil {
+	// 		Dead = true
+	// 	}
+	// }
+	for _, sl := range strikeList {
+		if sl.Online {
+			if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(x, y, sl.Shape); contactSet != nil {
+				Dead = true
+			}
 		}
 	}
-
 	if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "Stopper"); collision != nil {
 		s := collision.SlideAgainstCell(collision.Cells[0], "Stopper")
 		if s != nil {
@@ -445,8 +326,8 @@ func (g *Game) syncCharacter() (RenderX, RenderY float64) {
 	} else {
 
 		//if collision := g.mainWorld.MainCharacter.Button.Check(x, y+1, "Stopper"); collision == nil
-		if g.mainWorld.MainCharacter.SpeedY <= 4 && g.mainWorld.MainCharacter.SpeedY >= 0 {
-			g.mainWorld.MainCharacter.SpeedY += 0.15
+		if g.mainWorld.MainCharacter.SpeedY <= 5 && g.mainWorld.MainCharacter.SpeedY >= 0 {
+			g.mainWorld.MainCharacter.SpeedY += 0.25
 
 		} else if g.mainWorld.MainCharacter.SpeedY <= 0 {
 			g.mainWorld.MainCharacter.SpeedY += 0.2
@@ -487,14 +368,14 @@ func (g *Game) syncCharacterMovement() {
 		g.mainWorld.MainCharacter.FaceAt = "r"
 	} else {
 		if g.mainWorld.MainCharacter.SpeedX >= 1 {
-			g.mainWorld.MainCharacter.SpeedX -= 0.5
+			g.mainWorld.MainCharacter.SpeedX -= 1
 			if g.mainWorld.MainCharacter.Status < 2 {
 				g.mainWorld.MainCharacter.Status++
 			} else {
 				g.mainWorld.MainCharacter.Status = 1
 			}
 		} else if g.mainWorld.MainCharacter.SpeedX <= -1 {
-			g.mainWorld.MainCharacter.SpeedX += 0.5
+			g.mainWorld.MainCharacter.SpeedX += 1
 			if g.mainWorld.MainCharacter.Status < 2 {
 				g.mainWorld.MainCharacter.Status++
 			} else {
@@ -514,7 +395,16 @@ func (g *Game) syncCharacterMovement() {
 	}
 }
 
-var strikeList map[int]*strike = make(map[int]*strike)
+var strikeList = make(map[int]*strike)
+
+//	var strikeList = struct {
+//		M       *map[int]*strike
+//		RWMutex *sync.RWMutex
+//	}{
+//
+//		M:       new(map[int]*strike),
+//		RWMutex: &sync.RWMutex{},
+//	}
 var TriggerList = make(map[any]*strikeTrigger)
 var rePressR bool
 
@@ -530,8 +420,8 @@ func (g *Game) resetMap() {
 	}
 	strikeList = make(map[int]*strike)
 	for _, s := range TriggerList {
-		if !isChanClosed(s.close) {
-			s.close <- 1
+		if !isChanClosed(s.KillSingal) {
+			s.KillSingal <- 1
 		}
 
 	}
@@ -589,6 +479,14 @@ var Keys struct {
 	R     bool
 	Space bool
 	A, D  bool
+	F1    struct {
+		Press   bool
+		Pressed bool
+	}
+	F11 struct {
+		Press   bool
+		Pressed bool
+	}
 }
 
 func (g *Game) syncExtraKeys() {
@@ -612,6 +510,20 @@ func (g *Game) syncExtraKeys() {
 		Keys.D = true
 	} else {
 		Keys.D = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyF1) && !Keys.F1.Pressed {
+		Keys.F1.Press = true
+	} else if !ebiten.IsKeyPressed(ebiten.KeyF1) {
+		Keys.F1.Pressed = false
+	} else {
+		Keys.F1.Press = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyF11) && !Keys.F11.Pressed {
+		Keys.F11.Press = true
+	} else if !ebiten.IsKeyPressed(ebiten.KeyF11) {
+		Keys.F11.Pressed = false
+	} else {
+		Keys.F11.Press = false
 	}
 }
 

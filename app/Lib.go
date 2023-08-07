@@ -19,6 +19,24 @@ import (
 	"golang.org/x/image/font"
 )
 
+type Character struct {
+	Status   int // 1,2,3 for three pictures 4 for dead but not completed
+	Obj      *resolv.Object
+	Top      *resolv.Object
+	Button   *resolv.Object
+	OnGround bool
+	SpeedX   float64
+	SpeedY   float64
+	Jump     Jump
+	FaceAt   string //It can be l(eft) or r(ight)
+
+}
+type Jump struct {
+	Jump   int
+	Chance int
+	Lock   sync.Mutex
+}
+
 var trapTrigger1 = TrapTrigger{
 	[]trapmovement{
 
@@ -31,7 +49,7 @@ var trapTrigger1 = TrapTrigger{
 		},
 		{
 			Mode: 3,
-			Time: 25,
+			Time: 22,
 			Movement: movementPlus{
 				SizeY: 40,
 				Y:     -500,
@@ -67,14 +85,14 @@ var trapTrigger1 = TrapTrigger{
 			},
 		}, {
 			Mode: 3,
-			Time: 25,
+			Time: 20,
 			Movement: movementPlus{
 				SizeY: 40,
 				Y:     -500,
 			},
 		}, {
 			Mode: 3,
-			Time: 52,
+			Time: 200,
 			Movement: movementPlus{
 				SizeY: 4,
 				Y:     500,
@@ -88,10 +106,10 @@ var trapTrigger1 = TrapTrigger{
 		},
 		{
 			Mode: 3,
-			Time: 50,
+			Time: 25,
 			Movement: movementPlus{
-				X:     -580,
-				Y:     -250,
+				X:     -670,
+				Y:     -250 + 48,
 				SizeX: 8,
 				SizeY: 8,
 			},
@@ -104,19 +122,40 @@ var trapTrigger1 = TrapTrigger{
 			},
 		}, {
 			Mode: 3,
-			Time: 37,
+			Time: 30,
 			Movement: movementPlus{
-				Y: 480,
+				Y: 440,
 			},
 		}, {
 			Mode: 3,
-			Time: 100,
+			Time: 70,
 			Movement: movementPlus{
 				SizeX: 17,
 			},
 		}, {
-			Mode: 2,
+			Mode: 4,
+			Time: 50,
+		}, {
+			Mode: 3,
+			Time: 100,
+			Movement: movementPlus{
+				SizeX: 20,
+				SizeY: 2,
+			},
+		}, {
+			Mode: 3,
 			Time: 200,
+			Movement: movementPlus{
+				X:     400,
+				Y:     180,
+				SizeX: 4,
+				SizeY: 4,
+			},
+		}, {
+			Mode: 3,
+			Movement: movementPlus{
+				Angle: 90,
+			},
 		},
 	},
 }
@@ -284,65 +323,72 @@ func (j *Jump) AddChance() bool {
 	} else {
 		return false
 	}
-
 }
 
-type safeMap struct {
-	m    map[any]any
-	lock *sync.RWMutex
-}
-
-func CreateSafeMap(m map[any]any) *safeMap {
-	return &safeMap{
-		m:    m,
-		lock: &sync.RWMutex{},
+/*
+	type safeMap struct {
+		m    *map[any]*any
+		lock *sync.RWMutex
 	}
-}
-func (m safeMap) Swap(id any, data any) any {
-	m.lock.Lock()
-	d := m.m[id]
-	m.m[id] = data
-	m.lock.Unlock()
-	return d
-}
-func (m safeMap) Store(id any, data any) {
-	m.lock.Lock()
-	m.m[id] = data
-	m.lock.Unlock()
-}
-func (m safeMap) Get(id any) any {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
-	return m.m[id]
-}
-func (m safeMap) SwapAndDelete(id any) any {
-	m.lock.Lock()
-	defer func() {
-		m.m[id] = nil
+
+	func CreateSafeMap(m map[any]*any) *safeMap {
+		return &safeMap{
+			m:    &m,
+			lock: &sync.RWMutex{},
+		}
+	}
+
+	func (m *safeMap) Swap(id any, data any) any {
+		m.lock.Lock()
+		defer func() {
+			(*m.m)[id] = &data
+			m.lock.Unlock()
+		}()
+		return (*m.m)[id]
+	}
+
+	func (m *safeMap) Store(id any, data any) {
+		m.lock.Lock()
+		(*m.m)[id] = &data
 		m.lock.Unlock()
-	}()
-	return m.m[id]
-}
-func (m safeMap) DeteleAll() []any {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	var dump []any = make([]any, len(m.m))
-	for _, a := range m.m {
-		dump = append(dump, a)
 	}
-	return dump
-}
-func (m safeMap) SwapAllDelete() (any, bool) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	for s, a := range m.m {
-		delete(m.m, s)
-		return a, true
+
+	func (m *safeMap) Get(id any) any {
+		m.lock.RLock()
+		defer m.lock.RUnlock()
+		return (*m.m)[id]
 	}
-	return nil, false
 
-}
+	func (m *safeMap) GetAll() []any {
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		var dump []any = make([]any, len(*m.m))
+		for _, a := range *m.m {
+			dump = append(dump, a)
+		}
+		return dump
+	}
 
+	func (m *safeMap) SwapAndDelete(id any) any {
+		m.lock.Lock()
+		defer func() {
+			delete((*m.m), id)
+			m.lock.Unlock()
+		}()
+		return (*m.m)[id]
+	}
+
+	func (m *safeMap) Dump() []any {
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		var dump []any = make([]any, len(*m.m))
+		for _, a := range *m.m {
+			dump = append(dump, a)
+		}
+		m.m = nil
+		return dump
+	}
+*/
 func (g *Game) box() {
 	g.putBlocksLine(movement{0, 0}, 0.5, 1, 40)
 	g.putBlocksLine(movement{0, 0}, 0.5, 2, 30)
@@ -355,210 +401,35 @@ type strike struct {
 	SizeX, SizeY float64
 	Angle        float64
 	Obj          *resolv.Object
+	Shape        *resolv.ConvexPolygon
 	Trigger      chan TrapTrigger
 	KillSingal   chan interface{}
 	Online       bool //Not using this again
-
-	// Close  chan interface{} //Not using this again
-	// Closed bool             //Not using this again
-	// Mutex  *sync.Mutex      //Not using this again
 }
 
-// If you need to destory this strike just Close the channel
-// Remind that delayed changes is recently not support Size
-/*
-func (s *strike) OldLoad() {
-	s.Closed = false
-	strikeWaitGroup.Add(1)
-	go func() {
-		defer strikeWaitGroup.Done()
-		for S := range s.Trigger {
-			for _, a := range S.Movement {
-				if s.Closed {
-					s.Mutex.Lock()
-
-					if !s.Closed && World != nil && s.Obj != nil {
-						World.Remove(s.Obj)
-					} else {
-						s.Mutex.Unlock()
-						return
-					}
-					s.Mutex.Unlock()
-					return
-				}
-				switch a.Mode {
-				case 1:
-
-					time.Sleep(time.Millisecond * time.Duration(a.Time) * 10)
-					s.Mutex.Lock()
-					if !s.Closed && World != nil && s.Obj != nil {
-						World.Add(s.Obj)
-
-					} else {
-						s.Mutex.Unlock()
-						return
-					}
-					s.Online = true
-					s.Mutex.Unlock()
-				case 2:
-					time.Sleep(time.Millisecond * time.Duration(a.Time) * 10)
-					s.Mutex.Lock()
-					if !s.Closed && World != nil && s.Obj != nil {
-						World.Remove(s.Obj)
-					} else {
-						s.Mutex.Unlock()
-						return
-					}
-					s.Online = false
-					s.Mutex.Unlock()
-				case 3:
-					if a.Time == 0 {
-
-						s.Angle = a.Movement.Angle
-						if a.Movement.X > 0 {
-							s.Pos.x = a.Movement.X
-						}
-						if a.Movement.Y > 0 {
-							s.Pos.y = a.Movement.Y
-						}
-						s.Mutex.Lock()
-
-						if !s.Closed && World != nil && s.Obj != nil {
-							World.Remove(s.Obj)
-						} else {
-							s.Mutex.Unlock()
-							return
-						}
-						s.Mutex.Unlock()
-
-						if a.Movement.SizeX > 0 {
-							s.SizeX = a.Movement.SizeX
-						}
-						if a.Movement.SizeY > 0 {
-							s.SizeY = a.Movement.SizeY
-						}
-						if a.Movement.SizeX > 0 && a.Movement.SizeY > 0 || (a.Movement.SizeX > 0 || a.Movement.SizeY > 0) {
-							s.Obj = resolv.NewObject(s.Pos.x, s.Pos.y, 32*s.SizeX, 32*s.SizeY, "deadly")
-							s.Obj.SetShape(resolv.NewConvexPolygon(
-								0, 0,
-
-								s.Obj.W/2, 0,
-								s.Obj.W/2+1, 0,
-								0, s.Obj.H,
-								s.Obj.W, s.Obj.H,
-							))
-							World.Add(s.Obj)
-						}
-						s.Obj.X = s.Pos.x
-						s.Obj.Y = s.Pos.y
-						s.Mutex.Lock()
-						if s.Obj != nil {
-							s.Obj.Update()
-						}
-						s.Mutex.Unlock()
-					} else {
-						sizeX := s.SizeX
-						sizeY := s.SizeY
-						for i := float64(1); i <= float64(a.Time); i++ {
-							t := time.After(time.Millisecond * 10)
-							s.Angle += a.Movement.Angle / float64(a.Time)
-							if a.Movement.X != 0 {
-								s.Pos.x += a.Movement.X / float64(a.Time)
-							}
-							if a.Movement.Y != 0 {
-								s.Pos.y += a.Movement.Y / float64(a.Time)
-							}
-
-							if a.Movement.SizeX > 0 && a.Movement.SizeY > 0 || (a.Movement.SizeX > 0 || a.Movement.SizeY > 0) {
-								newSizeX := func() float64 {
-									if a.Movement.SizeX > 0 {
-										return (a.Movement.SizeX-sizeX)/float64(a.Time)*i + sizeX
-									}
-									return sizeX
-								}()
-								newSizeY := func() float64 {
-									if a.Movement.SizeY > 0 {
-										return (a.Movement.SizeY-sizeY)/float64(a.Time)*i + sizeY
-									}
-									return sizeY
-								}()
-								s.Mutex.Lock()
-
-								if !s.Closed && World != nil && s.Obj != nil {
-									World.Remove(s.Obj)
-
-								} else {
-									s.Mutex.Unlock()
-									return
-								}
-								s.Mutex.Unlock()
-
-								s.Obj = resolv.NewObject(s.Pos.x, s.Pos.y, 32*newSizeX, 32*newSizeY, "deadly")
-								s.Obj.SetShape(resolv.NewConvexPolygon(
-									0, 0,
-
-									s.Obj.W/2, 0,
-									s.Obj.W/2+1, 0,
-									0, s.Obj.H,
-									s.Obj.W, s.Obj.H,
-								))
-
-								s.Mutex.Lock()
-								if !s.Closed && World != nil && s.Obj != nil {
-									World.Add(s.Obj)
-								} else {
-									s.Mutex.Unlock()
-									return
-								}
-								s.Mutex.Unlock()
-
-								s.SizeX = newSizeX
-								s.SizeY = newSizeY
-							} else {
-								s.Obj.X = s.Pos.x
-								s.Obj.Y = s.Pos.y
-
-							}
-							s.Mutex.Lock()
-							if s.Obj != nil {
-								s.Obj.Update()
-							}
-							s.Mutex.Unlock()
-							<-t
-						}
-					}
-				case 4:
-					time.Sleep(time.Millisecond * time.Duration(a.Time) * 10)
-				}
-			}
-		}
-	}()
-	go func() {
-		<-s.Close
-		if s.Obj != nil && World != nil {
-			s.Mutex.Lock()
-			World.Remove(s.Obj)
-			s.Mutex.Unlock()
-		}
-		s.Online = false
-		s.Closed = true
-		close(s.Trigger)
-		close(s.Close)
-	}()
-}
-*/
 func (s *strike) Render(screen *ebiten.Image) {
 	if s.Online {
 		geo := &ebiten.DrawImageOptions{}
-		// {
-		// 	s2 := StrikePhoto.Bounds().Size()
-		// 	geo.GeoM.Translate(-float64(s2.X)/2, -float64(s2.Y)/2)
-		// }
-
-		geo.GeoM.Rotate(getRadian(s.Angle))
 		geo.GeoM.Scale(s.SizeX, s.SizeY)
+		geo.GeoM.Rotate(getRadian(s.Angle))
 		geo.GeoM.Translate(s.Obj.X, s.Obj.Y)
 		screen.DrawImage(StrikePhoto, geo)
+
+		// Try to underSTAND the rotate between Resolv and Ebitengine
+		shape := s.Shape
+		verts := shape.Transformed()
+		for i := 0; i < len(verts); i++ {
+			vert := verts[i]
+			next := verts[0]
+
+			if i < len(verts)-1 {
+				next = verts[i+1]
+			}
+			// vector.StrokeLine(screen, float32(vert.X()), vert.Y(), next.X(), next.Y(), 2, color.Black, true)
+
+			ebitenutil.DrawLine(screen, vert.X(), vert.Y(), next.X(), next.Y(), color.RGBA{255, 0, 0, 1})
+
+		}
 	}
 
 }
@@ -573,28 +444,24 @@ func NewStrike(Pos movement, SizeX, SizeY float64) *strike {
 		0, obj.H,
 		obj.W, obj.H,
 	))
-	// obj := resolv.NewObject(Pos.x, Pos.y, 64, 32, "deadly")
-	// obj.SetShape(resolv.NewConvexPolygon(
-	// 	0, 0,
-	// 	0, 0,
-	// 	0, 64,
-	// 	64, 64,
-	// 	64, 64,
-	// ))
 	obj.Update()
-
+	shape := resolv.NewConvexPolygon(
+		0, 0,
+		32/2, 0,
+		0, 32,
+		32, 32,
+	)
+	shape.SetScale(SizeX, SizeY)
 	return &strike{
-		Pos:     Pos,
-		SizeX:   SizeX,
-		SizeY:   SizeY,
-		Angle:   0,
-		Obj:     obj,
-		Trigger: make(chan TrapTrigger),
-		// Close:      make(chan interface{}),
-		// Closed:     false,
+		Pos:        Pos,
+		SizeX:      SizeX,
+		SizeY:      SizeY,
+		Angle:      0,
+		Obj:        obj,
+		Shape:      shape,
+		Trigger:    make(chan TrapTrigger),
 		KillSingal: make(chan interface{}),
 		Online:     false,
-		// Mutex:      &sync.Mutex{},
 	}
 }
 
@@ -756,25 +623,35 @@ func (s *strike) handlerMovement(action trapmovement) (stop bool) {
 		sizeY: s.SizeY,
 	}
 	delayProcess := func() {
+
 		s.Pos.x += action.Movement.X / float64(action.Time)
 		s.Pos.y += action.Movement.Y / float64(action.Time)
 		s.SizeX += (ifPositiveNum(s.SizeX, action.Movement.SizeX) - PreferData.sizeX) / float64(action.Time)
 		s.SizeY += (ifPositiveNum(s.SizeY, action.Movement.SizeY) - PreferData.sizeY) / float64(action.Time)
 		s.Angle += action.Movement.Angle / action.Time
+		s.Shape.SetScale(s.SizeX, s.SizeY)
+		s.Shape.SetPosition(s.Pos.x, s.Pos.y)
+		s.Shape.SetRotation(-getRadian(s.Angle))
+		log.Println(s.Pos.x, s.Obj.X)
+
 		s.Obj.X = s.Pos.x
 		s.Obj.Y = s.Pos.y
 		s.Obj.W = 32 * s.SizeX
 		s.Obj.H = 32 * s.SizeY
-		s.Obj.SetShape(resolv.NewConvexPolygon(
+		shape := resolv.NewConvexPolygon(
 			0, 0,
-
 			s.Obj.W/2, 0,
 			s.Obj.W/2+1, 0,
 			0, s.Obj.H,
 			s.Obj.W, s.Obj.H,
-		))
-		// s.Obj.Shape.SetScale(s.SizeX, s.SizeY)
-		s.Obj.Shape.SetRotation(s.Angle)
+		)
+		if s.Angle != 0 {
+			s.Obj.W = 32 * s.SizeX * 2
+			s.Obj.H = 32 * s.SizeY * 2
+			s.Obj.Shape.Move(32*s.SizeX, 32*s.SizeY)
+		}
+		shape.SetRotation(-getRadian(s.Angle))
+		s.Obj.SetShape(shape)
 		s.Obj.Update()
 	}
 	if action.Time <= 0 {
@@ -783,23 +660,33 @@ func (s *strike) handlerMovement(action trapmovement) (stop bool) {
 		s.SizeX = ifPositiveNum(s.SizeX, action.Movement.SizeX)
 		s.SizeY = ifPositiveNum(s.SizeY, action.Movement.SizeY)
 		s.Angle += action.Movement.Angle
+		s.Shape.ScaleW = s.SizeX
+		s.Shape.ScaleH = s.SizeY
+		s.Shape.SetPosition(s.Pos.x, s.Pos.y)
+		s.Shape.SetRotation(getRadian(s.Angle))
+
 		s.Obj.X = s.Pos.x
 		s.Obj.Y = s.Pos.y
 		s.Obj.W = 32 * s.SizeX
 		s.Obj.H = 32 * s.SizeY
-		s.Obj.SetShape(resolv.NewConvexPolygon(
+		shape := resolv.NewConvexPolygon(
 			0, 0,
 
 			s.Obj.W/2, 0,
 			s.Obj.W/2+1, 0,
 			0, s.Obj.H,
 			s.Obj.W, s.Obj.H,
-		))
-		// s.Obj.Shape.SetScale(s.SizeX, s.SizeY)
-		s.Obj.Shape.SetRotation(s.Angle)
+		)
+		if s.Angle != 0 {
+			s.Obj.W = 32 * s.SizeX * 2
+			s.Obj.H = 32 * s.SizeY * 2
+			s.Obj.Shape.Move(32*s.SizeX, 32*s.SizeY)
+		}
+		shape.SetRotation(-getRadian(s.Angle))
+		s.Obj.SetShape(shape)
 		s.Obj.Update()
 	} else {
-		for i := 1; i < int(action.Time); i++ {
+		for i := float64(0); i <= action.Time; i++ {
 			select {
 			case <-time.After(time.Millisecond * 10):
 				delayProcess()
@@ -841,4 +728,89 @@ type movementPlus struct {
 	Angle        float64
 	X, Y         float64
 	SizeX, SizeY float64
+}
+
+type strikeTrigger struct {
+	s          *strike
+	Press      *ebiten.Key
+	obj        *resolv.Object
+	action     TrapTrigger
+	Image      *ebiten.Image
+	ImageA     float32
+	KillSingal chan interface{}
+}
+
+func NewTrigger(s *strike, key *ebiten.Key, obj *resolv.Object, Image *ebiten.Image, action TrapTrigger, RGBA float32) *strikeTrigger {
+	return &strikeTrigger{
+		s:          s,
+		Press:      key,
+		obj:        obj,
+		action:     action,
+		KillSingal: make(chan interface{}, 1),
+		Image:      Image,
+		ImageA:     RGBA,
+	}
+}
+func (st *strikeTrigger) Process() { go st.process() }
+func (st *strikeTrigger) process() {
+	if st.obj != nil {
+		World.Add(st.obj)
+		for {
+			select {
+			case <-time.After(time.Millisecond * 10):
+				if co := st.obj.Check(0, 0, "character"); co != nil {
+					if st.collision(co) {
+						st.s.Send(st.action)
+						st.KillSingal <- 1
+					}
+				}
+			case <-st.KillSingal:
+				waitKeepProcessing.Add(1)
+				close(st.KillSingal)
+				World.Remove(st.obj)
+				st.obj = nil
+				st.Image = nil
+				waitKeepProcessing.Done()
+				return
+			}
+		}
+	} else {
+		for {
+			select {
+			case <-time.After(time.Millisecond * 10):
+				if ebiten.IsKeyPressed(*st.Press) {
+					st.s.Trigger <- st.action
+					st.KillSingal <- 1
+				}
+			case <-st.KillSingal:
+				waitKeepProcessing.Add(1)
+				close(st.KillSingal)
+				st.obj = nil
+				st.Image = nil
+				waitKeepProcessing.Done()
+				return
+			}
+		}
+	}
+}
+func (st *strikeTrigger) collision(co *resolv.Collision) bool {
+	if st.obj.Shape != nil {
+		if cos := st.obj.Shape.Intersection(0, 0, co.Objects[0].Shape); cos != nil {
+			return true
+		}
+	} else if co.Objects[0].Shape != nil {
+		return true
+	}
+	return false
+}
+
+// it must be a Object trigger if it Renders
+func (st *strikeTrigger) Render(screen *ebiten.Image) {
+	// make sure that im not stupid
+	if st.obj != nil && st.Image != nil {
+		geo := &ebiten.DrawImageOptions{}
+		geo.GeoM.Translate(st.obj.X, st.obj.Y)
+		geo.ColorScale.SetA(st.ImageA)
+		screen.DrawImage(st.Image, geo)
+	}
 }
