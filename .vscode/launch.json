@@ -8,24 +8,6 @@
       "mode": "auto",
       "program": "${workspaceFolder}/main.go"
     },
-    {
-      "name": "C/C++ Runner: Debug Session",
-      "type": "cppdbg",
-      "request": "launch",
-      "args": [],
-      "stopAtEntry": false,
-      "externalConsole": true,
-      "cwd": "c:/Users/Baicai/Desktop/Golang项目/IWannaEscape",
-      "program": "c:/Users/Baicai/Desktop/Golang项目/IWannaEscape/build/Debug/outDebug",
-      "MIMode": "gdb",
-      "miDebuggerPath": "gdb",
-      "setupCommands": [
-        {
-          "description": "Enable pretty-printing for gdb",
-          "text": "-enable-pretty-printing",
-          "ignoreFailures": true
-        }
-      ]
-    }
+   
   ]
 }
