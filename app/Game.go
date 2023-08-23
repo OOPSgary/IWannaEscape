@@ -76,6 +76,20 @@ func (g *Game) game1() {
 			deadSoundPlayer.Play()
 		})
 	}
+	if ebiten.IsKeyPressed(ebiten.KeyF1) && !Keys.F1.Pressed {
+		Keys.F1.Press = true
+	} else if !ebiten.IsKeyPressed(ebiten.KeyF1) {
+		Keys.F1.Pressed = false
+	} else {
+		Keys.F1.Press = false
+	}
+	if ebiten.IsKeyPressed(ebiten.KeyF11) && !Keys.F11.Pressed {
+		Keys.F11.Press = true
+	} else if !ebiten.IsKeyPressed(ebiten.KeyF11) {
+		Keys.F11.Pressed = false
+	} else {
+		Keys.F11.Press = false
+	}
 }
 
 func game2() {}
