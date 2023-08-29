@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"os"
 	"sync"
 	"time"
 
@@ -55,7 +56,7 @@ func init() {
 			time.Sleep(time.Millisecond * 10)
 		}
 	}()
-	fontData, err := emFs.ReadFile("resource/msyh.ttc")
+	fontData, err := os.ReadFile("C:\\Windows\\Fonts\\msyh.ttc")
 	if err != nil {
 		log.Fatal(err)
 	}
