@@ -47,7 +47,6 @@ func (b *bullets) updateBullets() {
 	for _, a := range b.b {
 		a.X += a.SpeedX
 	}
-
 }
 
 var bulletImage *ebiten.Image = ebiten.NewImage(1, 1)
@@ -57,17 +56,14 @@ func init() {
 }
 
 func (b *bullets) bulletCheckObjects(obj *resolv.Object) int {
-	var newb []bullet
 	var hit int
-	for _, a := range b.b {
+	b.m.Lock()
+	for h, a := range b.b {
 		if obj.X <= a.X && obj.X+obj.W >= a.X && obj.Y <= a.Y && obj.Y+obj.H >= a.Y {
 			hit++
-			continue
+			b.b = append(b.b[:h], b.b[h+1:]...)
 		}
-		newb = append(newb, a)
 	}
-	b.m.Lock()
 	defer b.m.Unlock()
-	b.b = newb
 	return hit
 }

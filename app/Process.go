@@ -27,12 +27,14 @@ var World = resolv.NewSpace(640, 480, 16, 16)
 
 func (g *Game) Update() error {
 	switch Status {
-	case 1:
+	case 0:
+	default:
 		if g.mainWorld.MainCharacter.Obj != nil {
 			g.syncCharacterMovement()
 			g.syncCharacter()
 		}
-
+		bulletList.updateBullets()
+		g.checkCurrentPortals()
 	}
 	return nil
 }
@@ -67,7 +69,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		} else {
 
 			drawMidTextLineByLine(0, 10, color.Black, screen, "Welcome to", "I JUST WANT TO ESCAPE", "F1: VSync模式切换 F11: 全屏")
-
 			g.HomePage.Update()
 			g.HomePage.Draw(screen)
 		}

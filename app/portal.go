@@ -15,10 +15,10 @@ type portal struct {
 	Object       *resolv.Object
 }
 
-var currentPortal *portal
+var currentPortal []*portal
 
-func newCurrPortal(To int, X, Y, SizeX, SizeY float64, fake bool) *portal {
-	currentPortal = &portal{
+func newCurrPortal(To int, X, Y, SizeX, SizeY float64, fake bool) []*portal {
+	currentPortal = []*portal{{
 		AtLevel: Status,
 		ToLevel: To,
 		X:       X,
@@ -27,6 +27,7 @@ func newCurrPortal(To int, X, Y, SizeX, SizeY float64, fake bool) *portal {
 		SizeY:   SizeY,
 		Fake:    fake,
 		Object:  resolv.NewObject(X, Y, 42, 45, "portal"),
+	},
 	}
 	return currentPortal
 }
@@ -43,6 +44,18 @@ func newPortal(AtLevel, ToLevel int, X, Y, SizeX, SizeY float64, fake bool) *por
 		Object:  resolv.NewObject(X, Y, 42, 45, "portal"),
 	}
 }
+func (g *Game) checkCurrentPortals() bool {
+	for _, portals := range currentPortal {
+		if portals.Check(g) {
+			Status = portals.ToLevel
+			goto Collision
+		}
+	}
+	return false
+Collision:
+	currentPortal = currentPortal[:0]
+	return true
+}
 func (p *portal) SetExist(Show bool) {
 	if Show && !p.Active {
 		p.Active = true
@@ -53,9 +66,12 @@ func (p *portal) SetExist(Show bool) {
 	}
 }
 func (p *portal) SetCurrent() {
-	currentPortal = p
+	currentPortal = []*portal{p}
 }
-func (p *portal) print(screen *ebiten.Image) {
+func (p *portal) AddCurrent() {
+	currentPortal = append(currentPortal, p)
+}
+func (p *portal) Draw(screen *ebiten.Image) {
 	screen.DrawImage(portalImage, makeGeo(p.X, p.Y, p.SizeX, p.SizeY, 0, nil))
 }
 func (p *portal) Check(g *Game) bool {

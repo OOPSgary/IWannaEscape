@@ -620,6 +620,9 @@ func (g *Game) DrawAll(screen *ebiten.Image) {
 	renderStrikes(strikeList, screen)
 	renderTrigger(TriggerList, screen)
 	g.drawBox(screen)
+	for _, portal := range currentPortal {
+		portal.Draw(screen)
+	}
 	if !Dead {
 		f1 := func(s string) float64 {
 			if g.mainWorld.MainCharacter.FaceAt == "l" {
