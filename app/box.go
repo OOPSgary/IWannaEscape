@@ -8,17 +8,17 @@ import (
 type block struct {
 	Obj    *resolv.Object
 	Size   float64
-	Rorate int
+	Rotate int
 }
 
-func (g *Game) newBlock(pos movement, size float64, rorate int) *block {
-	obj := resolv.NewObject(float64(pos.x), float64(pos.y), 32*size, 32*size, "Stopper")
+func (g *Game) newBlock(pos movement, size float64, rotate int) *block {
+	obj := resolv.NewObject(pos.x, pos.y, 32*size, 32*size, "Stopper")
 	World.Add(obj)
 
 	b := block{
 		Obj:    obj,
 		Size:   size,
-		Rorate: rorate,
+		Rotate: rotate,
 	}
 	g.mainWorld.Blocks = append(g.mainWorld.Blocks, &b)
 	return &b
@@ -30,7 +30,7 @@ func (b block) Draw(screen *ebiten.Image) {
 	geo := &ebiten.DrawImageOptions{}
 	geo.GeoM.Scale(b.Size, b.Size)
 	geo.GeoM.Translate(b.Obj.X, b.Obj.Y)
-	geo.GeoM.Rotate(getRadian(float64(b.Rorate)))
+	geo.GeoM.Rotate(getRadian(float64(b.Rotate)))
 	screen.DrawImage(Stopper, geo)
 }
 func (g *Game) putBlocksLine(StartPos movement, Size float64, Line int, amount int) {

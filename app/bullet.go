@@ -19,7 +19,7 @@ type bullets struct {
 	m *sync.Mutex
 }
 
-var blist *bullets = &bullets{
+var bulletList *bullets = &bullets{
 	m: &sync.Mutex{},
 }
 

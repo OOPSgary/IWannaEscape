@@ -6,9 +6,9 @@ import (
 )
 
 type portal struct {
-	Atlevel      int
-	Tolevel      int
-	Visibal      bool
+	AtLevel      int
+	ToLevel      int
+	Active       bool
 	X, Y         float64
 	SizeX, SizeY float64
 	Fake         bool
@@ -17,10 +17,10 @@ type portal struct {
 
 var currentPortal *portal
 
-func newCurrPortal(Tolevel int, X, Y, SizeX, SizeY float64, fake bool) *portal {
+func newCurrPortal(To int, X, Y, SizeX, SizeY float64, fake bool) *portal {
 	currentPortal = &portal{
-		Atlevel: Status,
-		Tolevel: Tolevel,
+		AtLevel: Status,
+		ToLevel: To,
 		X:       X,
 		Y:       Y,
 		SizeX:   SizeX,
@@ -31,10 +31,10 @@ func newCurrPortal(Tolevel int, X, Y, SizeX, SizeY float64, fake bool) *portal {
 	return currentPortal
 }
 
-func newPortal(Atlevel, Tolevel int, X, Y, SizeX, SizeY float64, fake bool) *portal {
+func newPortal(AtLevel, ToLevel int, X, Y, SizeX, SizeY float64, fake bool) *portal {
 	return &portal{
-		Atlevel: Status,
-		Tolevel: Tolevel,
+		AtLevel: AtLevel,
+		ToLevel: ToLevel,
 		X:       X,
 		Y:       Y,
 		SizeX:   SizeX,
@@ -44,11 +44,11 @@ func newPortal(Atlevel, Tolevel int, X, Y, SizeX, SizeY float64, fake bool) *por
 	}
 }
 func (p *portal) SetExist(Show bool) {
-	if Show && !p.Visibal {
-		p.Visibal = true
+	if Show && !p.Active {
+		p.Active = true
 		World.Add(p.Object)
-	} else if !Show && p.Visibal {
-		p.Visibal = false
+	} else if !Show && p.Active {
+		p.Active = false
 		World.Remove(p.Object)
 	}
 }
@@ -59,8 +59,8 @@ func (p *portal) print(screen *ebiten.Image) {
 	screen.DrawImage(portalImage, makeGeo(p.X, p.Y, p.SizeX, p.SizeY, 0, nil))
 }
 func (p *portal) Check(g *Game) bool {
-	if p.Visibal && p.Object.Check(g.mainWorld.MainCharacter.SpeedX, g.mainWorld.MainCharacter.SpeedY, "character") != nil {
-		Status = p.Tolevel
+	if p.Active && p.Object.Check(g.mainWorld.MainCharacter.SpeedX, g.mainWorld.MainCharacter.SpeedY, "character") != nil {
+		Status = p.ToLevel
 		p.SetExist(false)
 		return true
 	}

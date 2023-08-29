@@ -30,8 +30,8 @@ type Character struct {
 	SpeedX   float64
 	SpeedY   float64
 	Jump     Jump
-	FaceAt   string //It can be l(eft) or r(ight)
-
+	//FaceAt Use l for left and r for right
+	FaceAt string
 }
 type Jump struct {
 	Jump   int
@@ -141,7 +141,7 @@ func init() {
 		}
 	}
 	Blood = ebiten.NewImage(1, 1)
-	Blood.Fill(color.RGBA{255, 0, 0, 1})
+	Blood.Fill(color.RGBA{R: 255, A: 1})
 
 	diedSound, err := emFs.ReadFile("resource/Duang.wav")
 	if err != nil {
@@ -169,7 +169,7 @@ var (
 	Blood            *ebiten.Image
 	portalImage      *ebiten.Image
 	saveImage        *ebiten.Image
-	audioContext     *audio.Context = audio.NewContext(sampleRate)
+	audioContext     = audio.NewContext(sampleRate)
 	deadSoundPlayer  *audio.Player
 	strikeSound      []byte
 )
@@ -242,7 +242,7 @@ func (g *Game) box() {
 	g.putBlocksLine(movement{640 - 16, 0}, 0.5, 2, 30)
 }
 
-// DrawString函数作为绘画文字
+// DrawString DrawString函数作为绘画文字
 func DrawString(s string, size int, X, Y, Xs, Ys, turn float64, c color.Color, Image *ebiten.Image, mid bool) int {
 	var change int
 	var y int
@@ -319,11 +319,11 @@ func (g *Game) resetMap() {
 	}
 	g.mainWorld.Blocks = make([]*block, 0)
 	for _, s := range strikeList {
-		if !isChanClosed(s.KillSingal) {
-			s.KillSingal <- 1
+		if !isChanClosed(s.KillSignal) {
+			s.KillSignal <- 1
 		}
 	}
-	strikeList = make(map[any]*strike)
+	strikeList = make(map[any]*Strike)
 	for _, s := range TriggerList {
 		if !isChanClosed(s.KillSingal) {
 			s.KillSingal <- 1
@@ -396,6 +396,7 @@ var Keys struct {
 	}
 }
 
+/*
 func TypeNumer(key ebiten.Key, num int64) int64 {
 	if key-ebiten.Key0 >= 0 || key-ebiten.Key0 <= 9 {
 		if ebiten.IsKeyPressed(key) && !KeyPressed[key] {
@@ -409,6 +410,7 @@ func TypeNumer(key ebiten.Key, num int64) int64 {
 	}
 	return num
 }
+*/
 
 var NumKeys = []ebiten.Key{
 	ebiten.Key0,
@@ -428,7 +430,7 @@ type fontdata struct {
 	fonts map[int]font.Face
 }
 
-var fontData fontdata = fontdata{
+var fontData = fontdata{
 	lock:  new(sync.RWMutex),
 	fonts: make(map[int]font.Face),
 }
@@ -610,7 +612,7 @@ func (g *Game) syncCharacterMovement() {
 	}
 }
 
-var strikeList = make(map[any]*strike)
+var strikeList = make(map[any]*Strike)
 var TriggerList = make(map[any]*strikeTrigger)
 var rePressR bool
 

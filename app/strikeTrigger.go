@@ -8,7 +8,7 @@ import (
 )
 
 type strikeTrigger struct {
-	s          *strike
+	s          *Strike
 	Press      *ebiten.Key
 	obj        *resolv.Object
 	action     TrapTrigger
@@ -17,7 +17,7 @@ type strikeTrigger struct {
 	KillSingal chan interface{}
 }
 
-func NewTrigger(s *strike, key *ebiten.Key, obj *resolv.Object, Image *ebiten.Image, action TrapTrigger, RGBA float32) *strikeTrigger {
+func NewTrigger(s *Strike, key *ebiten.Key, obj *resolv.Object, Image *ebiten.Image, action TrapTrigger, RGBA float32) *strikeTrigger {
 	return &strikeTrigger{
 		s:          s,
 		Press:      key,
@@ -102,7 +102,7 @@ func (st *strikeTrigger) Render(screen *ebiten.Image) {
 }
 
 var trapTrigger1 = TrapTrigger{
-	[]trapmovement{
+	[]trapMovement{
 
 		{
 			Mode: 1,

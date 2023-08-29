@@ -67,8 +67,8 @@ func (g *Game) game1() {
 		g.screen.DrawImage(GameOver, geo)
 		CallOnce(1, func() {
 			for _, s := range strikeList {
-				if !isChanClosed(s.KillSingal) {
-					s.KillSingal <- 1
+				if !isChanClosed(s.KillSignal) {
+					s.KillSignal <- 1
 				}
 			}
 			cleanStrikes(strikeList)

@@ -28,7 +28,7 @@ func main() {
 		),
 		widget.ButtonOpts.Image(buttonImage),
 		widget.ButtonOpts.Text("Start the game", f, &widget.ButtonTextColor{
-			Idle: color.NRGBA{0xdf, 0xf4, 0xff, 0xff},
+			Idle: color.NRGBA{R: 0xdf, G: 0xf4, B: 0xff, A: 0xff},
 		}),
 		widget.ButtonOpts.TextPadding(widget.Insets{
 			Left:   15,
@@ -42,11 +42,12 @@ func main() {
 	)
 	rootContainer.AddChild(button)
 	log.Println("IJustWantTOEscape")
-	ebiten.SetWindowTitle("IJustwantToEscape")
+	ebiten.SetWindowTitle("IWannaEscape Beta Version")
 	ebiten.SetWindowSize(640, 480)
 	ebiten.SetTPS(120)
-	log.Println("Config Will saved to Config.json")
-	var NewGame *app.Game = &app.Game{
+	log.Println("Config Will saved to Config.json(TODO)")
+
+	var NewGame = &app.Game{
 		Wait: &sync.WaitGroup{},
 	}
 	NewGame.HomePage = &ebitenui.UI{

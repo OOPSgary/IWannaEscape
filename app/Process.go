@@ -59,7 +59,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				rePressR = false
 			}
 			CallOnce("Trap-1", func() {
-				deadSoundPlayer.Rewind()
+				if deadSoundPlayer.Rewind() != nil {
+					return
+				}
 				deadSoundPlayer.Play()
 			})
 		} else {
@@ -94,18 +96,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 }
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeight int) {
+func (g *Game) Layout(int, int) (screenWidth int, screenHeight int) {
 	return 640, 480
 }
 
-var Status int = 0
-var Dead bool = false
+var Status = 0
+var Dead = false
 var waitKeepProcessing = new(sync.WaitGroup)
 var WaitTime time.Duration
 var KeyPressed = make(map[ebiten.Key]bool)
 
-// func newFill(w, h int, r, g, b, a uint8) (i *ebiten.Image) {
-// 	i = ebiten.NewImage(w, h)
-// 	i.Fill(color.RGBA{r, g, b, a})
-// 	return
-// }
+func newFill(w, h int, r, g, b, a uint8) (i *ebiten.Image) {
+	i = ebiten.NewImage(w, h)
+	i.Fill(color.RGBA{R: r, G: g, B: b, A: a})
+	return
+}

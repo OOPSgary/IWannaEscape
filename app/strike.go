@@ -11,27 +11,27 @@ import (
 	"github.com/solarlune/resolv"
 )
 
-type strike struct {
+type Strike struct {
 	Pos          movement
 	SizeX, SizeY float64
 	Angle        float64
 	Shape        *resolv.ConvexPolygon
 	Trigger      chan TrapTrigger
-	KillSingal   chan interface{}
+	KillSignal   chan interface{}
 	Online       bool //Not using this again
 }
 type TrapTrigger struct {
-	Movement []trapmovement
+	Movement []trapMovement
 }
 
 const (
-	TrapAppear = iota + 1
-	TrapDisappear
-	TrapMove
-	TrapSleep
+	AppearTrap = iota + 1
+	DisappearTrap
+	MoveTrap
+	SleepTrap
 )
 
-type trapmovement struct {
+type trapMovement struct {
 	Mode int
 	//10MillCounter
 	Time     float64
@@ -47,7 +47,7 @@ type movementPlus struct {
 	SizeX, SizeY float64
 }
 
-func NewStrike(Pos movement, SizeX, SizeY float64) *strike {
+func NewStrike(Pos movement, SizeX, SizeY float64) *Strike {
 
 	shape := resolv.NewConvexPolygon(
 		0, 0,
@@ -57,34 +57,34 @@ func NewStrike(Pos movement, SizeX, SizeY float64) *strike {
 	)
 	shape.SetPosition(Pos.x, Pos.y)
 	shape.SetScale(SizeX, SizeY)
-	return &strike{
+	return &Strike{
 		Pos:        Pos,
 		SizeX:      SizeX,
 		SizeY:      SizeY,
 		Angle:      0,
 		Shape:      shape,
 		Trigger:    make(chan TrapTrigger),
-		KillSingal: make(chan interface{}),
+		KillSignal: make(chan interface{}),
 		Online:     false,
 	}
 
 }
-func renderStrikes(s map[any]*strike, screen *ebiten.Image) {
+func renderStrikes(s map[any]*Strike, screen *ebiten.Image) {
 	for _, singleS := range s {
 		if singleS != nil {
 			singleS.Render(screen)
 		}
 	}
 }
-func cleanStrikes(s map[any]*strike) {
-	for _, s := range strikeList {
-		if !isChanClosed(s.KillSingal) {
-			s.KillSingal <- 1
+func cleanStrikes(s map[any]*Strike) {
+	for _, s := range s {
+		if !isChanClosed(s.KillSignal) {
+			s.KillSignal <- 1
 		}
 	}
-	strikeList = make(map[any]*strike)
+	strikeList = make(map[any]*Strike)
 }
-func (s *strike) Render(screen *ebiten.Image) {
+func (s *Strike) Render(screen *ebiten.Image) {
 	if s.Online {
 		geo := &ebiten.DrawImageOptions{}
 		geo.GeoM.Scale(s.SizeX, s.SizeY)
@@ -92,17 +92,16 @@ func (s *strike) Render(screen *ebiten.Image) {
 		geo.GeoM.Translate(s.Pos.x, s.Pos.y)
 		screen.DrawImage(StrikePhoto, geo)
 
-		// Try to underSTAND the rotate between Resolv and Ebitengine
 		shape := s.Shape
-		verts := shape.Transformed()
-		for i := 0; i < len(verts); i++ {
-			vert := verts[i]
-			next := verts[0]
+		Vert := shape.Transformed()
+		for i := 0; i < len(Vert); i++ {
+			vert := Vert[i]
+			next := Vert[0]
 
-			if i < len(verts)-1 {
-				next = verts[i+1]
+			if i < len(Vert)-1 {
+				next = Vert[i+1]
 			}
-			vector.StrokeLine(screen, float32(vert.X()), float32(vert.Y()), float32(next.X()), float32(next.Y()), 2, color.RGBA{255, 0, 0, 1}, true)
+			vector.StrokeLine(screen, float32(vert.X()), float32(vert.Y()), float32(next.X()), float32(next.Y()), 2, color.RGBA{R: 255, A: 1}, true)
 
 			// ebitenutil.DrawLine(screen, vert.X(), vert.Y(), next.X(), next.Y(), color.RGBA{255, 0, 0, 1})
 
@@ -110,25 +109,25 @@ func (s *strike) Render(screen *ebiten.Image) {
 	}
 
 }
-func (s *strike) Send(t TrapTrigger) error {
+func (s *Strike) Send(t TrapTrigger) error {
 	select {
-	case <-s.KillSingal:
+	case <-s.KillSignal:
 		return errSendOnClosedChannel
 	default:
 		s.Trigger <- t
 	}
 	return nil
 }
-func (s *strike) Load() {
+func (s *Strike) Load() {
 	go s.load()
 }
-func (s *strike) load() {
+func (s *Strike) load() {
 	for {
 		if s.process() {
 			waitKeepProcessing.Add(1)
 			close(s.Trigger)
-			if !isChanClosed(s.KillSingal) {
-				close(s.KillSingal)
+			if !isChanClosed(s.KillSignal) {
+				close(s.KillSignal)
 			}
 			s.Online = false
 			waitKeepProcessing.Done()
@@ -136,11 +135,11 @@ func (s *strike) load() {
 		}
 	}
 }
-func (s *strike) process() (stop bool) {
+func (s *Strike) process() (stop bool) {
 	var a TrapTrigger
 	select {
 	case a = <-s.Trigger:
-	case <-s.KillSingal:
+	case <-s.KillSignal:
 		return true
 	}
 	sysfont.NewFinder(nil).List()
@@ -164,7 +163,7 @@ func (s *strike) process() (stop bool) {
 	}
 	return false
 }
-func (s *strike) handlerAppear(action trapmovement) (stop bool) {
+func (s *Strike) handlerAppear(action trapMovement) (stop bool) {
 	select {
 	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
 		s.Online = true
@@ -172,11 +171,11 @@ func (s *strike) handlerAppear(action trapmovement) (stop bool) {
 			action.Func()
 		}
 		return false
-	case <-s.KillSingal:
+	case <-s.KillSignal:
 		return true
 	}
 }
-func (s *strike) handlerDisAppear(action trapmovement) (stop bool) {
+func (s *Strike) handlerDisAppear(action trapMovement) (stop bool) {
 	select {
 	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
 		s.Online = false
@@ -184,11 +183,11 @@ func (s *strike) handlerDisAppear(action trapmovement) (stop bool) {
 			action.Func()
 		}
 		return false
-	case <-s.KillSingal:
+	case <-s.KillSignal:
 		return true
 	}
 }
-func (s *strike) handlerMovement(action trapmovement) (stop bool) {
+func (s *Strike) handlerMovement(action trapMovement) (stop bool) {
 	PreferData := struct {
 		sizeX, sizeY float64
 		PosX, PosY   float64
@@ -202,17 +201,17 @@ func (s *strike) handlerMovement(action trapmovement) (stop bool) {
 	}
 	delayProcess := func() {
 		if action.Movement.SetPos {
-			dx := (action.Movement.X - PreferData.PosX)
-			dy := (action.Movement.Y - PreferData.PosY)
-			s.Pos.x += dx / float64(action.Time)
-			s.Pos.y += dy / float64(action.Time)
+			dx := action.Movement.X - PreferData.PosX
+			dy := action.Movement.Y - PreferData.PosY
+			s.Pos.x += dx / action.Time
+			s.Pos.y += dy / action.Time
 		} else {
-			s.Pos.x += action.Movement.X / float64(action.Time)
-			s.Pos.y += action.Movement.Y / float64(action.Time)
+			s.Pos.x += action.Movement.X / action.Time
+			s.Pos.y += action.Movement.Y / action.Time
 		}
 
-		s.SizeX += (ifPositiveNum(s.SizeX, action.Movement.SizeX) - PreferData.sizeX) / float64(action.Time)
-		s.SizeY += (ifPositiveNum(s.SizeY, action.Movement.SizeY) - PreferData.sizeY) / float64(action.Time)
+		s.SizeX += (ifPositiveNum(s.SizeX, action.Movement.SizeX) - PreferData.sizeX) / action.Time
+		s.SizeY += (ifPositiveNum(s.SizeY, action.Movement.SizeY) - PreferData.sizeY) / action.Time
 		s.Angle += action.Movement.Angle / action.Time
 		s.Shape.SetScale(s.SizeX, s.SizeY)
 		s.Shape.SetPosition(s.Pos.x, s.Pos.y)
@@ -241,7 +240,7 @@ func (s *strike) handlerMovement(action trapmovement) (stop bool) {
 			select {
 			case <-time.After(time.Millisecond * 10):
 				delayProcess()
-			case <-s.KillSingal:
+			case <-s.KillSignal:
 				return true
 			}
 		}
@@ -256,9 +255,9 @@ func (s *strike) handlerMovement(action trapmovement) (stop bool) {
 	}
 	return false
 }
-func (s *strike) handlerWaiting(action trapmovement) (stop bool) {
+func (s *Strike) handlerWaiting(action trapMovement) (stop bool) {
 	select {
-	case <-s.KillSingal:
+	case <-s.KillSignal:
 		return true
 	case <-time.After(time.Millisecond * 10 * time.Duration(action.Time)):
 		if action.Func != nil {
