@@ -471,6 +471,9 @@ func (g *Game) resetCharacter() {
 		Button: button,
 	}
 }
+
+// func (g *Game)
+
 func (g *Game) moveCharacter(x, y float64) {
 	g.mainWorld.MainCharacter.Obj.X = x + 4
 	g.mainWorld.MainCharacter.Obj.Y = y
@@ -493,8 +496,50 @@ func (g *Game) characterLeave() {
 	World.Remove(g.mainWorld.MainCharacter.Button)
 }
 
-func (g *Game) syncCharacter() (RenderX, RenderY float64) {
+func (g *Game) gravity() {
+	if g.mainWorld.MainCharacter.SpeedY <= 5 && g.mainWorld.MainCharacter.SpeedY >= 0 {
+		g.mainWorld.MainCharacter.SpeedY += 0.25
 
+	} else if g.mainWorld.MainCharacter.SpeedY <= 0 {
+		g.mainWorld.MainCharacter.SpeedY += 0.2
+	}
+}
+func (g *Game) syncCharacter() (RenderX, RenderY float64) {
+	x, y := g.mainWorld.MainCharacter.SpeedX, g.mainWorld.MainCharacter.SpeedY
+	if collisionTop := g.mainWorld.MainCharacter.Obj.Check(x, y, "Stopper"); collisionTop != nil {
+		contact := collisionTop.ContactWithObject(collisionTop.Objects[0])
+		if hasOverlap(g.mainWorld.MainCharacter.Obj.Y, g.mainWorld.MainCharacter.Obj.H+y,
+			contact.Y()) && contact.Y() != 0 {
+			y = contact.Y()
+			g.mainWorld.MainCharacter.SpeedY = 0
+		} else {
+			x = contact.X()
+			g.mainWorld.MainCharacter.SpeedX = 0
+			g.gravity()
+		}
+	} else {
+		g.gravity()
+	}
+
+	if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "deadly"); collision != nil {
+		if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(x, y, collision.Objects[0].Shape); contactSet != nil {
+			Dead = true
+		}
+	}
+
+	g.mainWorld.MainCharacter.Obj.X += x
+	g.mainWorld.MainCharacter.Obj.Y += y
+	g.mainWorld.MainCharacter.Obj.Update()
+	for _, sl := range strikeList {
+		if sl.Online {
+			if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(0, 0, sl.Shape); contactSet != nil {
+				Dead = true
+			}
+		}
+	}
+	return g.mainWorld.MainCharacter.Obj.X - 4, g.mainWorld.MainCharacter.Obj.Y
+}
+func (g *Game) syncCharacter2() (RenderX, RenderY float64) {
 	x, y := g.mainWorld.MainCharacter.SpeedX, g.mainWorld.MainCharacter.SpeedY
 	if collision := g.mainWorld.MainCharacter.Obj.Check(x, y, "deadly"); collision != nil {
 		if contactSet := g.mainWorld.MainCharacter.Obj.Shape.Intersection(x, y, collision.Objects[0].Shape); contactSet != nil {
@@ -584,24 +629,28 @@ func (g *Game) syncCharacterMovement() {
 		}
 		g.mainWorld.MainCharacter.FaceAt = "r"
 	} else {
-		if g.mainWorld.MainCharacter.SpeedX >= 1 {
-			g.mainWorld.MainCharacter.SpeedX -= 1
-			if g.mainWorld.MainCharacter.Status < 2 {
-				g.mainWorld.MainCharacter.Status++
-			} else {
-				g.mainWorld.MainCharacter.Status = 1
-			}
-		} else if g.mainWorld.MainCharacter.SpeedX <= -1 {
-			g.mainWorld.MainCharacter.SpeedX += 1
-			if g.mainWorld.MainCharacter.Status < 2 {
-				g.mainWorld.MainCharacter.Status++
-			} else {
-				g.mainWorld.MainCharacter.Status = 1
-			}
-		} else {
+		/*
+				if g.mainWorld.MainCharacter.SpeedX >= 1 {
+					g.mainWorld.MainCharacter.SpeedX -= 1
+					if g.mainWorld.MainCharacter.Status < 2 {
+						g.mainWorld.MainCharacter.Status++
+					} else {
+						g.mainWorld.MainCharacter.Status = 1
+					}
+				} else if g.mainWorld.MainCharacter.SpeedX <= -1 {
+					g.mainWorld.MainCharacter.SpeedX += 1
+					if g.mainWorld.MainCharacter.Status < 2 {
+						g.mainWorld.MainCharacter.Status++
+					} else {
+						g.mainWorld.MainCharacter.Status = 1
+					}
+				} else {
 			g.mainWorld.MainCharacter.Status = 1
-			g.mainWorld.MainCharacter.SpeedX = 0
-		}
+				g.mainWorld.MainCharacter.SpeedX = 0
+			}
+		*/
+		g.mainWorld.MainCharacter.Status = 1
+		g.mainWorld.MainCharacter.SpeedX = 0
 	}
 	if Keys.Space {
 		if g.mainWorld.MainCharacter.Jump.Update() {
@@ -640,4 +689,8 @@ func (g *Game) DrawAll(screen *ebiten.Image) {
 		screen.DrawImage(Kid[g.mainWorld.MainCharacter.Status],
 			makeGeo(f1(fa), g.mainWorld.MainCharacter.Obj.Y, f2(fa), 1, 0, nil))
 	}
+}
+
+func hasOverlap(Y1, H1, Y2 float64) bool {
+	return Y1 < Y2 && Y2 < Y1+H1
 }

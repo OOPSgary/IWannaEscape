@@ -50,7 +50,10 @@ func (st *strikeTrigger) processObj() {
 			return
 		}
 		if co := st.obj.Check(0, 0, "character"); co != nil && st.collision(co) {
-			st.s.Send(st.action)
+			err := st.s.Send(st.action)
+			if err != nil {
+				return
+			}
 			st.KillSingal <- 1
 		}
 	}
@@ -91,7 +94,7 @@ func renderTrigger(tri map[any]*strikeTrigger, screen *ebiten.Image) {
 	}
 }
 
-// it must be a Object trigger if it Renders
+// Render it must be a Object trigger if it Renders
 func (st *strikeTrigger) Render(screen *ebiten.Image) {
 	if st.obj != nil && st.Image != nil {
 		geo := &ebiten.DrawImageOptions{}
@@ -197,7 +200,7 @@ var trapTrigger1 = TrapTrigger{
 				SizeX: 17,
 			},
 		}, {
-			Mode: 4,
+			Mode: SleepTrap,
 			Time: 50,
 		}, {
 			Mode: 3,
@@ -232,20 +235,34 @@ var trapTrigger1 = TrapTrigger{
 			},
 		}, {
 			Mode: 3,
-			Time: 80,
+			Time: 40,
 			Movement: movementPlus{
-				X: -800,
+				X: -600,
 			},
 		}, {
 			Mode: 3,
 			Time: 20,
 			Movement: movementPlus{
-				Angle:  90,
+				Angle:  0,
 				SizeX:  2,
 				SizeY:  2,
 				SetPos: true,
-				X:      200,
-				Y:      200,
+				X:      0,
+				Y:      100,
+			},
+		}, {
+			Mode: MoveTrap,
+			Time: 200,
+			Movement: movementPlus{
+				SizeX:  20,
+				SetPos: false,
+			},
+		},
+		{
+			Mode: MoveTrap,
+			Time: 200,
+			Movement: movementPlus{
+				Y: 250,
 			},
 		},
 	},

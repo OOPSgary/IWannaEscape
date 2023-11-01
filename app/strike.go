@@ -113,8 +113,7 @@ func (s *Strike) Send(t TrapTrigger) error {
 	select {
 	case <-s.KillSignal:
 		return errSendOnClosedChannel
-	default:
-		s.Trigger <- t
+	case s.Trigger <- t:
 	}
 	return nil
 }
@@ -244,9 +243,16 @@ func (s *Strike) handlerMovement(action trapMovement) (stop bool) {
 				return true
 			}
 		}
-		s.Angle = PreferData.Angle + action.Movement.Angle
-		s.Pos.x = PreferData.PosX + action.Movement.X
-		s.Pos.y = PreferData.PosY + action.Movement.Y
+		if action.Movement.SetPos {
+			s.Angle = action.Movement.Angle
+			s.Pos.x = action.Movement.X
+			s.Pos.y = action.Movement.Y
+		} else {
+			s.Angle = PreferData.Angle + action.Movement.Angle
+			s.Pos.x = PreferData.PosX + action.Movement.X
+			s.Pos.y = PreferData.PosY + action.Movement.Y
+		}
+
 		s.Shape.SetRotation(-getRadian(s.Angle))
 		s.Shape.SetPosition(s.Pos.x, s.Pos.y)
 		if action.Func != nil {
