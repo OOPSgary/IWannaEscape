@@ -18,9 +18,3 @@
 - If i did things wrong, you can start an issue and talk with me/如果我在版权，代码[稳定性/问题]上出现问题 欢迎提issue
 - 感谢胡老师和顾老师 让我能坚定地向前走 而不是被所谓高效的代码而蒙蔽双眼
 - Thanks Mr Hu and Mr Gu making me run towards my dream
-# Why Go?
-Golang在国内没有任何易于一个初中生参加的比赛和考核 但不过由于以下几点 我还是选择go
-- “老奶奶级别”包管理
-- 简洁但不失严谨
-- 我不太喜欢(针对个人而言)Python的语法
-- 性能位于C/CPP和java/C#的中间
