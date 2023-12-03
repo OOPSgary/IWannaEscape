@@ -1,0 +1,5 @@
+package textTest
+
+func main() {
+
+}

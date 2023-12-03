@@ -1,10 +1,19 @@
-package object
+package Object
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/solarlune/resolv"
 )
 
+type Object interface {
+	Position() (x, y float64)
+	Run(world *resolv.Space) error
+	Draw(dst *ebiten.Image)
+	Quit() error
+	Update() error
+}
+
+/*
 type Object interface {
 	Movement
 	Render
@@ -51,3 +60,4 @@ type Render interface {
 	DiscuzPhoto(SignName string) *ebiten.Image
 	DefaultDiscuzPhoto(SignName string) *ebiten.Image
 }
+*/

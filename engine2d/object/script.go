@@ -1,4 +1,4 @@
-package ActiveObject
+package Object
 
 import "IJustWantToEscape/script"
 
@@ -7,8 +7,7 @@ A multi Object Scipter
 */
 type ScriptRunner struct {
 	Channel chan script.Script
-	Ticker  chan struct{}
-	Object  *Object
+	Object  *StatefullObject
 }
 
 type Text []struct {
