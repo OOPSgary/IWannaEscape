@@ -1,7 +1,7 @@
 package engine2d
 
 import (
-	Object "IJustWantToEscape/engine2d/object"
+	"IJustWantToEscape/method"
 	"sort"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -9,7 +9,7 @@ import (
 
 type drawLevel []*struct {
 	level   int
-	Objects []Object.Object
+	Objects []method.Object
 }
 
 // 元素个数
@@ -32,8 +32,8 @@ type Game struct {
 }
 
 const (
-	ScreenHeight = 1080
-	ScreenWidth  = 1960
+	ScreenHeight = 960
+	ScreenWidth  = 1280
 )
 
 func (g *Game) Update() error {

@@ -1,4 +1,4 @@
-package Object
+package method
 
 import "IJustWantToEscape/script"
 

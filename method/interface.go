@@ -1,4 +1,4 @@
-package Object
+package method
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
@@ -7,9 +7,8 @@ import (
 
 type Object interface {
 	Position() (x, y float64)
-	Run(world *resolv.Space) error
+	Init(world *resolv.Space) error
 	Draw(dst *ebiten.Image)
-	Quit() error
 	Update() error
 }
 

@@ -20,7 +20,10 @@ var (
 	sampleRate     = 44400
 )
 
-var Manager *files = new(files)
+var Manager *files = &files{
+	store: make(map[string]*info),
+	m:     &sync.RWMutex{},
+}
 
 type files struct {
 	store map[string]*info
